@@ -98,20 +98,30 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-	  // 1. 读取 PC13 引脚的状态
-	  // HAL_GPIO_ReadPin 返回值有两种：GPIO_PIN_SET (1) 或 GPIO_PIN_RESET (0)
-	  if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_RESET)
-	  {
-	      // 2. 读到 0 (RESET)，说明按键被按下了 (因为是负逻辑)
-	      // 给 PA5 写入 1 (SET)，点亮绿色 LED
-		  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
-	  }
-	  else
-	  {
-	      // 3. 读到 1 (SET)，说明按键没被按下
-	      // 给 PA5 写入 0 (RESET)，熄灭绿色 LED
-		  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
-	  }
+	  // 1. 周期的前半段：无论按键状态如何，LED 统一亮起 100ms
+	      // 这对应了原版代码中，无论是红灯还是绿灯，都会先亮 0.1 秒的逻辑
+	      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+	      HAL_Delay(100);
+
+	      // 2. 周期的后半段：先将 LED 熄灭
+	      // 这对应了原版代码中，切换到另一个颜色（蓝色）的状态
+	      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+
+	      // 3. 核心分支：根据按键输入，决定后半段（熄灭状态）停留多长时间
+	      if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_RESET)
+	      {
+	          // 读到 0 (按下 B1)：保持熄灭 400ms (慢闪，模拟 Blue<->Green)
+	          HAL_Delay(400);
+	      }
+	      else
+	      {
+	          // 读到 1 (未按 B1)：保持熄灭 100ms (快闪，模拟 Blue<->Red)
+	          HAL_Delay(100);
+	      }
+
+
+
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
