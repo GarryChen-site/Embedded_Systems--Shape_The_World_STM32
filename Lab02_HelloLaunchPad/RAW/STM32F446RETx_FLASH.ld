@@ -22,10 +22,14 @@ SECTIONS {
         . = ALIGN(4);
         *(.text)
         *(.text*)
+        . = ALIGN(4);
+    } >FLASH
+
+    .rodata : {
+        . = ALIGN(4);
         *(.rodata)
         *(.rodata*)
         . = ALIGN(4);
-        _etext = .;
     } >FLASH
 
     _sidata = LOADADDR(.data);
@@ -44,13 +48,15 @@ SECTIONS {
         _sbss = .;
         *(.bss)
         *(.bss*)
+        *(COMMON)
         . = ALIGN(4);
         _ebss = .;
     } >RAM
 
-    /DISCARD/ : {
+    /DISCARD/ :
+    {
         libc.a ( * )
-        libcm.a ( * )
+        libm.a ( * )
         libgcc.a ( * )
     }
 }
