@@ -98,24 +98,17 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-	  // 1. 周期的前半段：无论按键状态如何，LED 统一亮起 100ms
-	      // 这对应了原版代码中，无论是红灯还是绿灯，都会先亮 0.1 秒的逻辑
 	      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
 	      HAL_Delay(100);
 
-	      // 2. 周期的后半段：先将 LED 熄灭
-	      // 这对应了原版代码中，切换到另一个颜色（蓝色）的状态
 	      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
 
-	      // 3. 核心分支：根据按键输入，决定后半段（熄灭状态）停留多长时间
 	      if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_RESET)
 	      {
-	          // 读到 0 (按下 B1)：保持熄灭 400ms (慢闪，模拟 Blue<->Green)
 	          HAL_Delay(400);
 	      }
 	      else
 	      {
-	          // 读到 1 (未按 B1)：保持熄灭 100ms (快闪，模拟 Blue<->Red)
 	          HAL_Delay(100);
 	      }
 
