@@ -1,73 +1,79 @@
 
+  .syntax unified
+  .cpu cortex-m4
+  .thumb
 
-    .syntax unified
-    .cpu cortex-m4
-    .thumb
 
-    .section .isr_vector, "a", %progbits
-    .type g_pfnVectors, %object
-    .size g_pfnVectors, .-g_pfnVectors
+  .global  g_pfnVectors    
+  .global  Default_Handler 
+  .global  Reset_Handler   
+
+  .word _sidata   
+  .word _sdata    
+  .word _edata    
+  .word _sbss     
+  .word _ebss     
+
+
+  .section  .isr_vector, "a", %progbits
+  .type  g_pfnVectors, %object
 
 g_pfnVectors:
-    .word    _estack
-    .word    Reset_Handler
-
-    .word    Default_Handler
-    .word    Default_Handler
-    .word    Default_Handler
-    .word    Default_Handler
-    .word    Default_Handler
-    .word    0
-    .word    0
-    .word    0
-    .word    0
-    .word    Default_Handler
-    .word    Default_Handler
-    .word    0
-    .word    Default_Handler
-    .word    Default_Handler
-
-    .fill    91, 4, 0
+  .word  _estack         
+  .word  Reset_Handler   
 
 
-    .section .text.Reset_Handler, "ax", %progbits
-    .weak   Reset_Handler
-    .type   Reset_Handler, %function
+
+  .section  .text.Reset_Handler
+  .type  Reset_Handler, %function
 
 Reset_Handler:
 
-    ldr     r0, =_sbss
-    ldr     r1, =_ebss
-    movs    r2, #0
+  ldr   sp, =_estack      
 
-bss_loop:
-    cmp     r0, r1
-    bge     bss_done
-    str     r2, [r0], #4
-    b       bss_loop
 
-bss_done:
-    ldr     r0, =_sdata
-    ldr     r1, =_edata
-    ldr     r2, =_sidata
+  /* 
+   * uint32_t *src = _sidata;
+   * uint32_t *dest = _sdata;
+   * while(dest < _edata) { *dest = *src; dest++; src++; }
+   */
 
-data_loop:
-    cmp     r0, r1
-    bge     data_done
-    ldr     r3, [r2], #4
-    std     r3, [r0], #4
-    b       data_loop
+  ldr r0, =_sdata         
+  ldr r1, =_edata         
+  ldr r2, =_sidata        
 
-data_done:
-    bl      main
-    b       .
-    .size   Reset_Handler, .-Reset_Handler
+CopyDataInit:
+  cmp r0, r1              
+  bcc CopyDataLoop        
+  b   ZeroBssInit         
 
-    .section .text.Default_Handler, "ax", %progbits
-    .weak   Default_Handler
-    .type   Default_handler, %function
+CopyDataLoop:
+  ldr r3, [r2], #4        
+  str r3, [r0], #4        
+  b   CopyDataInit        
 
-Default_Handler:
-    b       .
-    .size   Default_Handler, .-Default_Handler
+  /* 
+   * uint32_t *dest = _sbss;
+   * while(dest < _ebss) { *dest = 0; dest++; }
+   */
+ZeroBssInit:
+  ldr r0, =_sbss          
+  ldr r1, =_ebss          
+  movs r3, #0             
 
+FillZeroBss:
+  cmp r0, r1              
+  bcc FillZeroBssLoop     
+  b   CallMain            
+
+FillZeroBssLoop:
+  str r3, [r0], #4        
+  b   FillZeroBss         
+
+
+CallMain:
+  bl  main                
+
+
+LoopForever:
+  b LoopForever

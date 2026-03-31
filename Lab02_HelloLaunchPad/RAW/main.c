@@ -1,67 +1,39 @@
 
-#include <stdint.h>
+#define RCC_AHB1ENR     (*((volatile unsigned int *)0x40023830))
 
-#define RCC_AHB1ENR (*((volatile uint32_t *)0x40023830U))
+#define GPIOA_MODER     (*((volatile unsigned int *)0x40020000))
+#define GPIOA_ODR       (*((volatile unsigned int *)0x40020014))
 
-#define GPIOAEN (1U << 0)
-#define GPIOCEN (1U << 2)
+#define GPIOC_MODER     (*((volatile unsigned int *)0x40020800))
+#define GPIOC_IDR       (*((volatile unsigned int *)0x40020810))
 
-#define GPIOA_MODER (*((volatile uint32_t *)0x40020000U))
-#define GPIOA_ODR (*((volatile uint32_t *)0x40020014U))
-
-#define PA5_MODER_MASK (3U << 10)
-#define PA5_MODER_OUT (1U << 10)
-#define PA5_ODR (1U << 5)
-
-#define GPIOC_MODER (*((volatile uint32_t *)0x40020800U))
-#define GPIOC_PUPDR (*((volatile uint32_t *)0x4002080CU))
-#define GPIOC_IDR (*((volatile uint32_t *)0x40020810U))
-
-#define PC13_MODER_MASK (3U << 26)
-#define PC13_PUPDR_MASK (3U << 26)
-#define PC13_IDR (1U << 13)
-
-#define DELAY_100MS 400000UL
-#define DELAY_400MS 1600000UL
-
-void GPIO_Init(void);
-void Delay(volatile uint32_t count);
+void delay_ms(volatile unsigned int ms) {
+    volatile unsigned int count = ms * 1600; 
+    while (count > 0) {
+        count--;
+    }
+}
 
 int main(void) {
-  GPIO_Init();
+    RCC_AHB1ENR |= (1 << 0) | (1 << 2);
 
-  while (1) {
-    uint32_t button_pressed = !(GPIOC_IDR & PC13_IDR);
+    GPIOA_MODER &= ~(3 << 10); 
+    GPIOA_MODER |= (1 << 10);  
 
-    GPIOA_ODR |= PA5_ODR;
-    Delay(DELAY_100MS);
+    GPIOC_MODER &= ~(3 << 26); 
 
-    GPIOA_ODR &= ~PA5_ODR;
+    while (1) {
+        GPIOA_ODR |= (1 << 5);     
+        delay_ms(100);
 
-    if (button_pressed) {
-      Delay(DELAY_400MS);
-    } else {
-      Delay(DELAY_100MS);
+        GPIOA_ODR &= ~(1 << 5);    
+
+        if ((GPIOC_IDR & (1 << 13)) == 0) {
+            delay_ms(400);
+        } else {
+            delay_ms(100);
+        }
     }
-  }
-}
-
-void GPIO_Init(void) {
-  RCC_AHB1ENR |= (GPIOAEN | GPIOCEN);
-
-  volatile uint32_t dummy = RCC_AHB1ENR;
-  (void)dummy;
-
-  GPIOA_MODER &= ~PA5_MODER_MASK;
-  GPIOA_MODER |= PA5_MODER_OUT;
-
-  GPIOC_MODER &= ~PC13_MODER_MASK;
-
-  GPIOC_PUPDR &= ~PC13_PUPDR_MASK;
-}
-
-void Delay(volatile uint32_t count) {
-  while (count) {
-    count--;
-  }
+    
+    return 0;
 }
