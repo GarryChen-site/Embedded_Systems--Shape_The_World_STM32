@@ -70,6 +70,10 @@ FillZeroBssLoop:
   str r3, [r0], #4        
   b   FillZeroBss         
 
+/* Call static constructors */
+CallLibcInit:
+  bl  __libc_init_array
+
 
 CallMain:
   bl  main                
