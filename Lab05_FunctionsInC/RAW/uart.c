@@ -1,4 +1,5 @@
-
+#include <stdint.h>
+#include "uart.h"
 
 #define RCC_AHB1ENR     (*((volatile unsigned int *)0x40023830))
 #define RCC_APB1ENR     (*((volatile unsigned int *)0x40023840))
@@ -43,7 +44,7 @@
 #define USART_CR1_RE    (1 << 2)
 
 
-void UART2_Init(void) {
+void UART_Init(void) {
     // 1. Enable GPIOA and UART2 clocks
     RCC_AHB1ENR |= GPIOAEN;
     RCC_APB1ENR |= UART2EN;
