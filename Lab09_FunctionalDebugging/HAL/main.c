@@ -233,6 +233,60 @@ static void MX_GPIO_Init(void) {
 
 /* USER CODE BEGIN 4 */
 
+uint8_t Get_IOMapped_Data(void) {
+  uint8_t state = 0;
+
+  if (HAL_GPIO_ReadPin(GPIOA, LD2_Pin) == GPIO_PIN_SET) {
+    state |= (1 << 2);
+  }
+
+  if (HAL_GPIO_ReadPin(GPIOC, SW1_Pin) == GPIO_PIN_SET) {
+    state |= (1 << 1);
+  }
+
+  if (HAL_GPIO_ReadPin(GPIOC, SW2_Pin) == GPIO_PIN_SET) {
+    state |= (1 << 0);
+  }
+
+  return state;
+}
+
+void Dump_Debug(void) {
+  if (debug_idx < 50) {
+    uint8_t current_state = Get_IOMapped_Data();
+
+    if ((debug_idx == 0) || (Data[debug_idx - 1] != current_state)) {
+      uint32_t current_time = HAL_GetTick();
+
+      Time[debug_idx] = current_time - last_time;
+      Data[debig_idx] = current_state;
+
+      last_time = current_time;
+      debug_idx++;
+    }
+  }
+}
+
+uint8_t Switch_Pressed(void) {
+  if ((HAL_GPIO_ReadPin(GPIOC, SW1_Pin) == GPIO_PIN_RESET) ||
+      (HAL_GPIO_ReadPin(GPIOC, SW2_Pin) == GPIO_PIN_RESET)) {
+    return 1;
+  }
+  return 0;
+}
+
+void LED_Flash(void) {
+  HAL_GPIO_WritePin(GPIOA, LD2_Pin, GPIO_PIN_SET);
+  Dump_Debug();
+  HAL_Delay(50);
+
+  HAL_GPIO_WritePin(GPIOA, LD2_Pin, GPIO_PIN_RESET);
+  Dump_Debug();
+  HAL_Delay(50);
+}
+
+void LED_Off(void) { HAL_GPIO_WritePin(GPIOA, LD2_Pin, GPIO_PIN_RESET); }
+
 /* USER CODE END 4 */
 
 /**
