@@ -22,10 +22,10 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
-uint32_t Time[50];
-uint8_t Data[50];
+uint32_t Time[50]; // records time stamps
+uint8_t Data[50];  // spliced data recording I/O status
 uint8_t debug_idx = 0;
-uint32_t last_time = 0;
+uint32_t last_time = 0; // last time stamp
 
 /* USER CODE END Includes */
 
@@ -233,6 +233,14 @@ static void MX_GPIO_Init(void) {
 
 /* USER CODE BEGIN 4 */
 
+/**
+ * @brief Package the current I/O status of the STM32 system into an 8-bit data
+ * custom format:
+ * [Bit 7:3] : reserved (0)
+ * [Bit 2]   : PA5 (LED) - 1:High(ON),  0:Low(OFF)
+ * [Bit 1]   : PC13(SW1) - 1:High(release), 0:Low(pressed)
+ * [Bit 0]   : PC12(SW2) - 1:High(release), 0:Low(pressed)
+ */
 uint8_t Get_IOMapped_Data(void) {
   uint8_t state = 0;
 
@@ -251,6 +259,10 @@ uint8_t Get_IOMapped_Data(void) {
   return state;
 }
 
+/**
+ * @brief only record the data and time difference when the current I/O status
+ * differs from the previous one
+ */
 void Dump_Debug(void) {
   if (debug_idx < 50) {
     uint8_t current_state = Get_IOMapped_Data();
