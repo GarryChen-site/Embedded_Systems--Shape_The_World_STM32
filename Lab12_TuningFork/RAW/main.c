@@ -20,6 +20,8 @@
 #define PC13_MODER_MASK (3U << 26)
 #define PC13_IDR (1U << 13)
 
+#define SW_PRESSED ((GPIOC_IDR & PC13_IDR) == 0)
+
 // =========================================================================
 // SysTick timer registers — 24-bit auto-reload timer, clock from AHB
 // =========================================================================
@@ -35,6 +37,9 @@
 // 18182 distinct values (including 0)
 // RELOAD = (16MHz / 880Hz) - 1 = 18181
 #define RELOAD_440HZ 18181U // 16MHz/18182 = 880Hz ISR → 440Hz output
+
+volatile unsigned int forkOn;
+volatile unsigned int input_sw;
 
 void Sound_Init(void) {
   RCC_AHB1ENR |= GPIOAEN | GPIOCEN;
@@ -53,6 +58,30 @@ void Sound_Init(void) {
   SCB_SHPR3 &= 0x00FFFFFF;
 
   STK_CTRL = 0x00000007;
+}
+
+void SysTick_Handler(void) {
+  int sw = SW_PRESSED;
+
+  if (sw && !input_sw) {
+    forkOn = 1;
+    input_sw = 1;
+  } else if (sw && input_sw == 2) {
+    forkOn = 0;
+    input_sw = 3;
+  } else if (!sw && input_sw == 1) {
+    forkOn = 1;
+    input_sw = 2;
+  } else if (!sw && input_sw == 3) {
+    forkOn = 0;
+    input_sw = 0;
+  }
+
+  if (forkOn) {
+    GPIOA_ODR ^= PA6_ODR;
+  } else {
+    GPIOA_ODR &= ~PA6_ODR;
+  }
 }
 
 int main(void) {
