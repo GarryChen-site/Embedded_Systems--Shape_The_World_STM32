@@ -86,6 +86,9 @@ void SysTick_Handler(void) {
 
 int main(void) {
 
+  forkOn = 0;
+  input_sw = 0;
+  Sound_Init();
   while (1) {
   }
 }
