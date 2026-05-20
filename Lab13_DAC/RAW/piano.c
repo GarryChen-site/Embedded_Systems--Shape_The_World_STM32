@@ -18,3 +18,32 @@
 #define KEY_E_BIT (1U << 9)
 #define KEY_G_BIT (1U << 10)
 #define KEY_ALL_MASK (KEY_C_BIT | KEY_D_BIT | KEY_E_BIT | KEY_G_BIT)
+
+void Piano_Init() {
+  RCC_AHB1ENR |= (1U << 2);
+  volatile uint32_t dummy = RCC_AHB1ENR;
+  (void)dummy;
+
+  // Clear mode bits for PC6, PC8, PC9, PC10 (set to input)
+  GPIOC_MODER &= ~(3U << 12) | // PC6
+                 ~(3U << 16) | // PC8
+                 ~(3U << 18) | // PC9
+                 ~(3U << 20);  // PC10
+}
+
+uint8_t Piano_In(void) {
+  uint32_t idr = GPIOC_IDR;
+  if (idr & KEY_G_BIT) { // higest frequency first
+    return SOL;
+  }
+  if (idr & KEY_E_BIT) {
+    return MI;
+  }
+  if (idr & KEY_D_BIT) {
+    return RE;
+  }
+  if (idr & KEY_C_BIT) {
+    return DO;
+  }
+  return SILENCE;
+}
