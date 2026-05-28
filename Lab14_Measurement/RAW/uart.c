@@ -3,6 +3,7 @@
 // =========================================================================
 // RCC REGISTERS
 // =========================================================================
+
 #define RCC_AHB1ENR (*((volatile unsigned int *)0x40023830))
 #define RCC_APB1ENR (*((volatile unsigned int *)0x40023840))
 
@@ -30,3 +31,16 @@
 // CR1 bits
 #define USART_CR1_TE (1 << 3)  // Transmitter enable
 #define USART_CR1_UE (1 << 13) // USART enable
+
+void UART2_OutChar(char c) {
+  while (!(USART2_SR & USART_SR_TXE))
+    ;
+  USART2_DR = c;
+}
+
+void UART2_OutString(const char *str) {
+  while (*str) {
+    UART2_OutChar(*str);
+    str++;
+  }
+}
