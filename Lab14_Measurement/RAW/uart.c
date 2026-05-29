@@ -4,6 +4,7 @@
 // RCC REGISTERS
 // =========================================================================
 
+#include "uart.h"
 #define RCC_AHB1ENR (*((volatile unsigned int *)0x40023830))
 #define RCC_APB1ENR (*((volatile unsigned int *)0x40023840))
 
@@ -31,6 +32,21 @@
 // CR1 bits
 #define USART_CR1_TE (1 << 3)  // Transmitter enable
 #define USART_CR1_UE (1 << 13) // USART enable
+
+void UART2_Init(void) {
+
+  // 1. Enable clocks
+  RCC_AHB1ENR |= GPIOAEN;
+  RCC_APB1ENR |= UART2EN;
+
+  GPIOA_MODER &= ~(3 << 4);
+  GPIOA_MODER |= (2 << 4);
+
+  GPIOA_AFRL &= ~(0xF << 8);
+  GPIOA_AFRL |= (0x7 << 8);
+
+  USART2_CR1 = USART_CR1_UE | USART_CR1_TE;
+}
 
 void UART2_OutChar(char c) {
   while (!(USART2_SR & USART_SR_TXE))
