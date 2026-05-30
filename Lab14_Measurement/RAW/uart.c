@@ -45,6 +45,12 @@ void UART2_Init(void) {
   GPIOA_AFRL &= ~(0xF << 8);
   GPIOA_AFRL |= (0x7 << 8);
 
+  // 1.  USARTDIV  = fPCLK / (16 × Baud)        → e.g. 104.1667
+  // 2.  Mantissa  = floor(USARTDIV)             → 104 = 0x68
+  // 3.  Fraction  = round(frac × 16)           → round(0.1667×16) = 3
+  // 4.  BRR       = (Mantissa << 4) | Fraction → 0x0683
+  USART2_BRR = 0x0683;
+
   USART2_CR1 = USART_CR1_UE | USART_CR1_TE;
 }
 
