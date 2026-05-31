@@ -1,6 +1,5 @@
 #ifndef MEASURE_H
 #define MEASURE_H
-#include <cstdint>
 #include <stdint.h>
 
 
@@ -9,6 +8,8 @@
 
 uint32_t Convert(uint32_t sample);
 
+void ConvertToString(uint32_t angle);
 
+extern char String[12];
 
 #endif
