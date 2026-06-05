@@ -9,12 +9,14 @@
 #define GPIOA_MODER (*((volatile unsigned int *)0x40020000))
 #define GPIOA_PUPDR (*((volatile unsigned int *)0x4002000C))
 
-#define ADC1_SR
-#define ADC1_CR2
-#define ADC1_DR
+#define ADC1_SR (*((volatile unsigned int *)0x40012000))
+#define ADC1_CR1 (*((volatile unsigned int *)0x40012004))
+#define ADC1_CR2 (*((volatile unsigned int *)0x40012008))
+#define ADC1_SMPR2 (*((volatile unsigned int *)0x40012010))
+#define ADC1_DR (*((volatile unsigned int *)0x4001204C))
 
-#define ADC_SR_EOC
-#define ADC_CR2_SWSTART
+#define ADC_SR_EOC (1u << 1)
+#define ADC_CR2_SWSTART (1u << 30)
 
 uint32_t ADC0_In(void) {
 
