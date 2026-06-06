@@ -18,6 +18,27 @@
 #define ADC_SR_EOC (1u << 1)
 #define ADC_CR2_SWSTART (1u << 30)
 
+void ADC0_Init(void) {
+
+  RCC_AHB1ENR |= (1 << 0);
+  volatile unsigned int delay = RCC_AHB1ENR;
+  (void)delay;
+
+  GPIOA_MODER |= (3 << 0);
+
+  GPIOA_PUPDR &= ~(3 << 0);
+
+  RCC_APB2ENR |= (1 << 8);
+  delay = RCC_AHB1ENR;
+  (void)delay;
+
+  ADC1_CR2 = 0;
+
+  ADC1_CR1 = 0;
+
+  ADC1_CR2 = 0;
+}
+
 uint32_t ADC0_In(void) {
 
   ADC1_CR2 |= ADC_CR2_SWSTART;
