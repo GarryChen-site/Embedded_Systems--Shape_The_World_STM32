@@ -13,10 +13,13 @@
 #define ADC1_CR1 (*((volatile unsigned int *)0x40012004))
 #define ADC1_CR2 (*((volatile unsigned int *)0x40012008))
 #define ADC1_SMPR2 (*((volatile unsigned int *)0x40012010))
+#define ADC1_SQR1 (*((volatile uint32_t *)0x4001202C)) // sequence reg 1
+#define ADC1_SQR3 (*((volatile uint32_t *)0x40012034)) // sequence reg 3
 #define ADC1_DR (*((volatile unsigned int *)0x4001204C))
 
-#define ADC_SR_EOC (1u << 1)
-#define ADC_CR2_SWSTART (1u << 30)
+#define ADC_SR_EOC (1 << 1)
+#define ADC_CR2_ADON (1 << 0)
+#define ADC_CR2_SWSTART (1 << 30)
 
 void ADC0_Init(void) {
 
@@ -32,11 +35,22 @@ void ADC0_Init(void) {
   delay = RCC_AHB1ENR;
   (void)delay;
 
+  // Power off ADC before configuring
   ADC1_CR2 = 0;
 
+  // CR1: 12-bit resolution, no scan, no interrupt
   ADC1_CR1 = 0;
 
+  // CR2: right-aligned, software trigger, single conversion
   ADC1_CR2 = 0;
+
+  ADC1_SMPR2 |= (7 << 0);
+
+  ADC1_SQR1 &= ~(0xF << 20);
+
+  ADC1_SQR3 &= ~(0x1F << 0);
+
+  ADC1_CR2 |= ADC_CR2_ADON;
 }
 
 uint32_t ADC0_In(void) {
