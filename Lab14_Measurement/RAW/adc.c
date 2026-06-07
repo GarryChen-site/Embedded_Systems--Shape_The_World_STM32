@@ -44,12 +44,15 @@ void ADC0_Init(void) {
   // CR2: right-aligned, software trigger, single conversion
   ADC1_CR2 = 0;
 
+  //  Sampling time for CH0: 480 cycles
   ADC1_SMPR2 |= (7 << 0);
 
+  // Sequence: 1 conversion, first channel = CH0
   ADC1_SQR1 &= ~(0xF << 20);
 
   ADC1_SQR3 &= ~(0x1F << 0);
 
+  // Power on ADC
   ADC1_CR2 |= ADC_CR2_ADON;
 }
 
