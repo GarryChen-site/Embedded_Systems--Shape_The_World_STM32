@@ -4,6 +4,11 @@
 #include "uart.h"
 #include <stdint.h>
 
+#define STK_CTRL (*((volatile unsigned int *)0xE000E010))
+#define STK_LOAD (*((volatile unsigned int *)0xE000E014))
+#define STK_VAL (*((volatile unsigned int *)0xE000E018))
+#define SCB_SHPR3 (*((volatile unsigned int *)0xE000ED20))
+
 volatile uint32_t ADCdata = 0;
 volatile uint32_t Angle = 0;
 volatile uint32_t Flag = 0;

@@ -13,8 +13,8 @@
 #define ADC1_CR1 (*((volatile unsigned int *)0x40012004))
 #define ADC1_CR2 (*((volatile unsigned int *)0x40012008))
 #define ADC1_SMPR2 (*((volatile unsigned int *)0x40012010))
-#define ADC1_SQR1 (*((volatile uint32_t *)0x4001202C)) // sequence reg 1
-#define ADC1_SQR3 (*((volatile uint32_t *)0x40012034)) // sequence reg 3
+#define ADC1_SQR1 (*((volatile unsigned int *)0x4001202C)) // sequence reg 1
+#define ADC1_SQR3 (*((volatile unsigned int *)0x40012034)) // sequence reg 3
 #define ADC1_DR (*((volatile unsigned int *)0x4001204C))
 
 #define ADC_SR_EOC (1 << 1)
