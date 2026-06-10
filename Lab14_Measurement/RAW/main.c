@@ -13,7 +13,15 @@ volatile uint32_t ADCdata = 0;
 volatile uint32_t Angle = 0;
 volatile uint32_t Flag = 0;
 
-static void SysTick_Init(uint32_t period) {}
+static void SysTick_Init(uint32_t period) {
+  STK_CTRL = 0;
+  STK_VAL = 0;
+  STK_LOAD = period - 1;
+
+  SCB_SHPR3 = (SCB_SHPR3 & 0x00FFFFFF) | (2 << 29);
+
+  STK_CTRL = 0x07;
+}
 
 void SysTick_Handler(void) {
   ADCdata = ADC0_In();
