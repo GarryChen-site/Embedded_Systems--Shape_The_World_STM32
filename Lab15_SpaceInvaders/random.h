@@ -1,4 +1,4 @@
-#ifdef RANDON_H
+#ifndef RANDON_H
 #define RANDON_H
 #include <stdint.h>
 
