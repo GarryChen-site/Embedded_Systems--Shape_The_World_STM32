@@ -2,6 +2,14 @@
 #include "ssd1306.h"
 #include <stdint.h>
 
+#define RCC_AHB1ENR (*((volatile uint32_t *)0x40023830U))
+#define RCC_APB1ENR (*((volatile uint32_t *)0x40023840U))
+
+#define GPIOB_MODER (*((volatile uint32_t *)0x40020400U))
+#define GPIOB_OTYPER (*((volatile uint32_t *)0x40020404U))
+#define GPIOB_OSPEEDR (*((volatile uint32_t *)0x40020408U))
+#define GPIOB_PUPDR (*((volatile uint32_t *)0x4002040CU))
+#define GPIOB_AFRH (*((volatile uint32_t *)0x40020424U))
 // ================================
 // I2C1 registers
 // ================================
