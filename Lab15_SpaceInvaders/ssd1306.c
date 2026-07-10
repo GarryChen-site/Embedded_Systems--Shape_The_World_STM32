@@ -1,5 +1,6 @@
 
 #include "ssd1306.h"
+#include <cstdint>
 #include <stdint.h>
 
 #define RCC_AHB1ENR (*((volatile uint32_t *)0x40023830U))
@@ -145,3 +146,39 @@ static const uint8_t Font5x8[][5] = {
     {0x10, 0x08, 0x08, 0x10, 0x08}, // 0x7E ~
     {0x1F, 0x24, 0x7C, 0x24, 0x1F}, // 0x7F (UT sign)
 };
+
+// ======================================
+// Low-level I2C1 primitives
+// ======================================
+
+static void i2c1_start(void) {
+  I2C1_CR1 |= I2C_CR1_START;
+  while (!(I2C1_SR1 & I2C_SR1_SB))
+    ;
+}
+
+// Send　7-bit address + W bit
+static void i2c1_addr(uint8_t addr7) {
+  I2C1_DR = (uint32_t)(addr7 << 1);
+  while (!(I2C1_SR1 & I2C_SR1_ADDR))
+    ;
+  (void)I2C1_SR1;
+  (void)I2C1_SR2;
+}
+
+// Send one byte
+// Waits for TXE (DR empty) before writing
+static void i2c1_byte(uint8_t b) {
+  while (!(I2C1_SR1 & I2C_SR1_TXE))
+    ;
+  I2C1_DR = (uint32_t)b;
+}
+
+// Generate STOP after ensuring last byte is fully transmitted
+static void i2c1_stop(void) {
+  while (!(I2C1_SR1 & I2C_SR1_TXE))
+    ;
+  while (!(I2C1_SR1 & I2C_SR1_BTF))
+    ;
+  I2C1_CR1 |= I2C_CR1_STOP;
+}
