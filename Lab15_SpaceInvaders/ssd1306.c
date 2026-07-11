@@ -1,6 +1,5 @@
 
 #include "ssd1306.h"
-#include <cstdint>
 #include <stdint.h>
 
 #define RCC_AHB1ENR (*((volatile uint32_t *)0x40023830U))
@@ -181,4 +180,47 @@ static void i2c1_stop(void) {
   while (!(I2C1_SR1 & I2C_SR1_BTF))
     ;
   I2C1_CR1 |= I2C_CR1_STOP;
+}
+
+// ==================================================
+// SSD1306 command helpers
+// ==================================================
+
+static void ssd1306_cmd_stream(const uint8_t *cmds, uint32_t n) {
+  i2c1_start();
+  i2c1_addr(SSD1306_I2C_ADDR);
+  i2c1_byte(0x00U); // A control byte mainly consists of Co and D/C# bits
+                    // following by six “0” ‘s.
+  for (uint32_t i = 0U; i < n; i++) {
+    i2c1_byte(cmds[i]);
+  }
+  i2c1_stop();
+}
+
+// ==========================================================
+// SSD1306_ClearBuffer - zero the frame buffer (black screen)
+// ==========================================================
+void SSD1306_ClearBuffer(void) {
+  for (uint32_t i = 0U; i < sizeof(ScreenBuffer); i++) {
+    ScreenBuffer[i] = 0x00U;
+  }
+}
+
+// ==========================================================
+// SSD1306_DisplayBuffer - send 1024-byte buffer to OLED
+// ==========================================================
+void SSD1306_DisplayBuffer(void) {
+  // Reset column/page pointers to full screen (horizontal addressing mode)
+  static const uint8_t addr[] = {0x21, 0x00, 0x7F, 0x22, 0x00, 0x07};
+  ssd1306_cmd_stream(addr, sizeof(addr));
+
+  // Send all 1024 bytes as one data stream
+  // Control byte 0x40: Co=0 (stream), D/C#=1 (data)
+  i2c1_start();
+  i2c1_addr(SSD1306_I2C_ADDR);
+  i2c1_byte(0x40U);
+  for (uint32_t i = 0U; i < sizeof(ScreenBuffer); i++) {
+    i2c1_byte(ScreenBuffer[i]);
+  }
+  i2c1_stop();
 }
