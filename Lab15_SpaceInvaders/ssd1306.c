@@ -31,7 +31,7 @@
 #define I2C_CR1_PE (1U << 0);
 #define I2C_CR1_START (1U << 8);
 #define I2C_CR1_STOP (1U << 9);
-#define I2C_CR1_ACK (1U << 10);
+#define I2C_CR1_SWRST (1U << 15);
 
 // ==================================================
 // Frame buffer - 128 columns x 8 pages = 1024 bytes
@@ -195,6 +195,73 @@ static void ssd1306_cmd_stream(const uint8_t *cmds, uint32_t n) {
     i2c1_byte(cmds[i]);
   }
   i2c1_stop();
+}
+
+// ==========================================================
+// SSD1306_Init - configure I2C1 and initialize the display
+// ==========================================================
+void SSD1306_Init(void) {
+
+  // 1. Enable clocks
+  RCC_AHB1ENR |= (1U << 1);
+  RCC_APB1ENR |= (1U << 21);
+
+  // 2. Configure PB8 (SCL) and PB9 (SDA)
+  //    AF mode (MODER=10), open-drain (OTYPER=1), high-speed (OSPEEDR=11)
+  //    Pull-up (PUPDR=01), AF4 (AFRH)
+  GPIOB_MODER &= ~((3U << 16) | (3U << 18)); // clear PB8/PB9
+  GPIOB_MODER |= ((2U << 16) | (2U << 18));  // AF mode
+  GPIOB_OTYPER |= (1U << 8) | (1U << 9);     // open-drain
+  GPIOB_OSPEEDR |= (3U << 16) | (3U << 18);  // high speed
+  GPIOB_PUPDR &= ~((3U << 16) | (3U << 18));
+  GPIOB_PUPDR |= (1U << 16) | (1U << 18); // pull-up
+  GPIOB_AFRH &= ~(0xFFU);                 // clear AF for PB8+PB9
+  GPIOB_AFRH |= (4U << 0) | (4U << 4);    // AF4 = I2C1
+
+  // 3. Reset I2C1
+  I2C1_CR1 |= I2C_CR1_SWRST;
+  I2C1_CR1 &= ~I2C_CR1_SWRST;
+
+  // 4. Configure I2C1 for 400kHz Fast mode
+  //    FREQ  = 16 (MHz, matches PCLK1)
+  //    F/S=1 (fast mode), DUTY=0, CCR=14
+  //      → Tscl = 3 × 14 × (1/16MHz) = 2625 ns → ~381 kHz
+  //    TRISE = floor(300ns × 16MHz) + 1 = 4+1 = 5
+  I2C1_CR2 = 16U;
+  I2C1_CCR = (1U << 15) | 14U; // F/S=1, DUTY=0, CCR=14
+  I2C1_TRISE = 5U;
+  I2C1_CR1 = I2C_CR1_PE; // enable I2C1
+
+  // Small settling delay after PE=1
+  for (volatile uint32_t d = 0; d < 1000U; d++)
+    ;
+
+  // 5. SSD1306 initialization sequence (128×64) ---------------------
+  static const uint8_t init_cmds[] = {
+      0xAE,             // Display OFF
+      0x20, 0x00,       // Horizontal addressing mode
+      0x21, 0x00, 0x7F, // Column address 0-127
+      0x22, 0x00, 0x07, // Page address 0-7
+      0x40,             // Start line = 0
+      0xA1,             // Segment re-map: col 127 → SEG0  (mirror X)
+      0xA8, 0x3F,       // Multiplex ratio: 64 (0x3F)
+      0xC8,             // COM scan direction: reverse  (mirror Y)
+      0xD3, 0x00,       // Display offset: 0
+      0xDA, 0x12,       // COM pins: sequential, disable COM left/right remap
+      0xD5, 0x80,       // Oscillator freq / divide ratio
+      0xD9, 0xF1,       // Pre-charge: 15 clocks phase2, 1 clock phase1
+      0xDB, 0x40,       // VCOMH deselect: ~0.77 × Vcc
+      0x81, 0xCF,       // Contrast: 207/255
+      0xA4,             // Entire display ON from RAM (not force-on)
+      0xA6,             // Normal display (not inverted)
+      0x8D, 0x14,       // Charge pump: enable (required for internal VCC)
+      0xAF,             // Display ON
+  };
+  ssd1306_cmd_stream(init_cmds, sizeof(init_cmds));
+
+  // 6. Start with a blank screen
+  SSD1306_ClearBuffer();
+  SSD1306_DisplayBuffer();
 }
 
 // ==========================================================

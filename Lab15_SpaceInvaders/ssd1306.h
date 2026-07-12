@@ -23,7 +23,7 @@ void SSD1306_Init(void);
 void SSD1306_ClearBuffer(void);
 
 // Send ScreenBuffer to the OLED (updates display)
-void SSD11306_DisplayBuffer(void);
+void SSD1306_DisplayBuffer(void);
 
 // Draw a 4-bit LM3S BMP sprite into ScreenBuffer
 void SSD1306_PrintBMP(uint8_t xpos, uint8_t ypos,
