@@ -291,3 +291,26 @@ void SSD1306_DisplayBuffer(void) {
   }
   i2c1_stop();
 }
+
+// ==========================================================
+// Text output functions
+// ==========================================================
+
+void SSD1306_Clear(void) {
+  SSD1306_ClearBuffer();
+  SSD1306_DisplayBuffer();
+  CursorX = 0;
+  CursorY = 0;
+}
+
+void SSD1306_SetCursor(uint8_t x, uint8_t y) {
+  CursorX = x;
+  CursorY = y & 0x07U;
+}
+
+void SSD1306_OutChar(char c) {}
+
+void SSD1306_OutString(const char *str) {
+  while (*str)
+    SSD1306_OutChar(*str++);
+}
