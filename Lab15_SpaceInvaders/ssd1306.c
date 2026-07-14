@@ -1,5 +1,6 @@
 
 #include "ssd1306.h"
+#include <cstdint>
 #include <stdint.h>
 
 #define RCC_AHB1ENR (*((volatile uint32_t *)0x40023830U))
@@ -308,7 +309,34 @@ void SSD1306_SetCursor(uint8_t x, uint8_t y) {
   CursorY = y & 0x07U;
 }
 
-void SSD1306_OutChar(char c) {}
+void SSD1306_OutChar(char c) {
+  if ((uint8_t)c < 0x20U || (uint8_t)c > 0x7FU) {
+    c = ' ';
+  }
+
+  const uint8_t *glyph = Font5x8[(uint8_t)c - 0x20U];
+
+  uint32_t col = (uint32_t)CursorX * 6U; // 5px wide + 1px gap
+  uint32_t page = (uint32_t)CursorY;     // 8-row band
+
+  if ((col + 6U > (uint32_t)SCREENW) || page > 7U) {
+    return;
+  }
+
+  for (uint8_t i = 0U; i < 5U; i++) {
+    ScreenBuffer[page * 128 + col + i] = glyph[i];
+  }
+
+  ScreenBuffer[page * 128 + col + 5U] = 0x00U;
+
+  CursorX++;
+  if ((uint32_t)CursorX * 6U >= 128U) {
+    CursorX = 0;
+    if (CursorY < 7) {
+      CursorY++;
+    }
+  }
+}
 
 void SSD1306_OutString(const char *str) {
   while (*str)
