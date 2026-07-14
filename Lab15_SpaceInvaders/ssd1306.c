@@ -1,6 +1,5 @@
 
 #include "ssd1306.h"
-#include <cstdint>
 #include <stdint.h>
 
 #define RCC_AHB1ENR (*((volatile uint32_t *)0x40023830U))
