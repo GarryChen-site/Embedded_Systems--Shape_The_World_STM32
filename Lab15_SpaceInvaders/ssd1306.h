@@ -42,7 +42,7 @@ void SSD1306_OutString(const char* str);
 // Print a single character at cursor position, advance cursor
 void SSD1306_OutChar(char c);
 
-// Print a 16-bit unsigned decimal number
+// Print a 16-bit unsigned decimal number (right-justified 5 digits)
 void SSD1306_OutUDec(uint16_t n);
                     
 

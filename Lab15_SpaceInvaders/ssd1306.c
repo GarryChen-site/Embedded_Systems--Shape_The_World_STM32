@@ -329,7 +329,7 @@ void SSD1306_OutChar(char c) {
   ScreenBuffer[page * 128 + col + 5U] = 0x00U;
 
   CursorX++;
-  if ((uint32_t)CursorX * 6U >= 128U) {
+  if ((uint32_t)CursorX * 6U >= (uint32_t)SCREENW) {
     CursorX = 0;
     if (CursorY < 7) {
       CursorY++;
@@ -340,4 +340,17 @@ void SSD1306_OutChar(char c) {
 void SSD1306_OutString(const char *str) {
   while (*str)
     SSD1306_OutChar(*str++);
+}
+
+void SSD1306_OutDec(uint16_t n) {
+  char buf[6]; // max "65535\0"
+  uint8_t i = 5U;
+  buf[5] = '\0';
+
+  do {
+    buf[--i] = (char)((n % 10U) + '0');
+    n = (uint16_t)(n / 10U);
+  } while (n && i > 0U);
+
+  SSD1306_OutString(&buf[i]);
 }
