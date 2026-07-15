@@ -1,5 +1,6 @@
 
 #include "ssd1306.h"
+
 #include <stdint.h>
 
 #define RCC_AHB1ENR (*((volatile uint32_t *)0x40023830U))
@@ -292,6 +293,42 @@ void SSD1306_DisplayBuffer(void) {
   i2c1_stop();
 }
 
+void SSD1306_PrintBMP(uint8_t xpos, uint8_t ypos, const uint8_t *ptr,
+                      uint8_t threshold) {
+  uint8_t width = ptr[18];  // BMP width
+  uint8_t height = ptr[22]; // BMP height
+
+  // Row stride
+  uint32_t bytes_per_row = ((uint32_t)width + 1U) / 2U;
+  uint32_t stride = ((bytes_per_row + 3U) / 4U) * 4U;
+
+  const uint8_t *pixels = ptr + 118U; // BMP pixel data
+
+  for (uint8_t r = 0U; r < height; r++) {
+    int32_t sy = (int32_t)ypos - (int32_t)r;
+    if (sy < 0 || sy >= (int32_t)SCREENH) {
+      continue;
+    }
+
+    uint32_t page = (uint32_t)sy / 8U;
+    uint8_t bit = (uint8_t)((uint32_t)sy % 8U);
+
+    for (uint8_t c = 0U; c < width; c++) {
+      uint32_t sx = (uint32_t)xpos + (uint32_t)c;
+      if (sx >= (uint32_t)SCREENW) {
+        continue;
+      }
+
+      // Extract 4-bit color nibble
+      uint8_t raw = pixels[r * stride + c / 2U];
+      uint8_t color = (c % 2U == 0U) ? (raw >> 4) & 0x0FU : raw & 0x0FU;
+
+      if (color > threshold) {
+        ScreenBuffer[page * (uint32_t)SCREENW + sx] |= (uint8_t)(1U << bit);
+      }
+    }
+  }
+}
 // ==========================================================
 // Text output functions
 // ==========================================================
