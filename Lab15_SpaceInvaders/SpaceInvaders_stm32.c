@@ -443,3 +443,32 @@ const uint8_t Laser1[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF};
+
+// =========================================================================
+// ADC (STM32 ADC1 CH0 on PA0)
+// =========================================================================
+
+static void ADC0_Init(void) {
+  RCC_AHB1ENR |= (1U << 0);
+  GPIOA_MODER |= (3U << 0);
+
+  RCC_APB2ENR |= (1U << 8);
+  ADC_CCR &= ~(3U << 16);
+
+  ADC1_CR1 = 0U;
+  ADC1_CR2 = 0U;
+  ADC1_SQR1 = 0U;
+  ADC1_SQR3 = 0U;
+  ADC1_SMPR2 = (7U << 0);
+
+  ADC1_CR2 |= (1U << 0);
+  for (volatile uint32_t d = 0; d < 10000U; d++)
+    ;
+}
+
+static uint32_t ADC0_In(void) {
+  ADC1_CR2 |= (1U << 30);
+  while (!(ADC1_SR & (1U << 1)))
+    ;
+  return ADC1_DR & 0xFFFU;
+}
