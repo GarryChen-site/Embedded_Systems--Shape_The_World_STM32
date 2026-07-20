@@ -472,3 +472,16 @@ static uint32_t ADC0_In(void) {
     ;
   return ADC1_DR & 0xFFFU;
 }
+
+// =========================================================================
+// SysTick at 30Hz (16 MHz / 30 = 533333)
+// Sending 1024 bytes over I2C at ~381 kHz (16MHz/42),
+// 1024 * 9 / 381,000 ~ 24 ms per frame
+// =========================================================================
+static void SysTick_Init_30Hz(void) {
+  STK_CTRL = 0U;
+  STK_VAL = 0U;
+  STK_LOAD = 533332U; // 16,000,000 / 30 -1 = 533332
+  SCB_SHPR3 = (SCB_SHPR3 & 0x00FFFFFF) | (2U << 29); // priority 2
+  STK_CTRL = 0x7U; // enable systick, enable interrupt, use processor clock
+}
