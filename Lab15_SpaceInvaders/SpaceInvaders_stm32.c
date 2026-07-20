@@ -485,3 +485,32 @@ static void SysTick_Init_30Hz(void) {
   SCB_SHPR3 = (SCB_SHPR3 & 0x00FFFFFF) | (2U << 29); // priority 2
   STK_CTRL = 0x7U; // enable systick, enable interrupt, use processor clock
 }
+
+// =========================================================================
+// Fire buttons: PC6 = missile, PC8 = laser
+// Both are rising-edge, external pull-down to GND
+// =========================================================================
+static void Switch_Init(void) {
+  RCC_AHB1ENR |= (1U << 2); // enable GPIOC
+  GPIOC_MODER &= ~((3U << 12) | (3U << 16));
+
+  RCC_APB2ENR |= (1U << 14);
+
+  // Route PC6
+  SYSCFG_EXTICR2 &= ~(0xFU << 8);
+  SYSCFG_EXTICR2 |= (2U << 8);
+
+  // Route PC8
+  SYSCFG_EXTICR3 &= ~(0xFU << 0);
+  SYSCFG_EXTICR3 |= (2U << 0);
+
+  // Unmask EXTI6 and EXTI8
+  EXTI_IMR |= (1U << 6) | (1U << 8);
+  // Rising-edge trigger for EXTI6 and EXTI8
+  EXTI_RTSR |= (1U << 6) | (1U << 8);
+  // Clear any pending flags
+  EXTI_PR = (1U << 6) | (1U << 8);
+
+  // Enable EXTI9_5 in NVIC (IRQ23, in ISER0 bit 23)
+  NVIC_ISER0 |= (1U << 23);
+}
