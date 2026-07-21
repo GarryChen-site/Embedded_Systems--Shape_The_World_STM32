@@ -514,3 +514,8 @@ static void Switch_Init(void) {
   // Enable EXTI9_5 in NVIC (IRQ23, in ISER0 bit 23)
   NVIC_ISER0 |= (1U << 23);
 }
+
+// =========================================================================
+// Convert - ADC 12-bit -> player X position
+// =========================================================================
+static uint32_t Conver(uint32_t sample) { return (110U * sample) / 4095U; }
