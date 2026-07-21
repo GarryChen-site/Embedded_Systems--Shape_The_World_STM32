@@ -1,3 +1,4 @@
+#include "sound_stm32.h"
 #include <stdint.h>
 
 // =========================================================================
@@ -519,3 +520,48 @@ static void Switch_Init(void) {
 // Convert - ADC 12-bit -> player X position
 // =========================================================================
 static uint32_t Conver(uint32_t sample) { return (110U * sample) / 4095U; }
+
+// =========================================================================
+// Capture BMP dimensions from header bytes (width=ptr[18], height=ptr[22])
+// =========================================================================
+#define ENEMYBONUSW ((uint8_t)SmallEnemyBonus0[18])
+#define ENEMYBONUSH ((uint8_t)SmallEnemyBonus0[22])
+// =========================================================================
+// Game object initializers
+// =========================================================================
+typedef struct {
+  uint32_t x;
+  uint32_t maxpoint[2]; // range of x and y values
+  uint32_t y;
+  const uint8_t *image[4]; // ptr->image
+  int32_t life;            // 0=dead, 1=alive
+  uint32_t deathCounter;   // number of cycles to show the explosion BMP image
+} STyp;
+
+STyp Enemy[8];
+STyp Bunker;
+STyp Player;
+STyp Missile[9]; // [0-7] = enemy missiles, [8] = player missile
+STyp Laser[9];   // [0-7] = enemy lasers, [8] = player laser
+STyp UFO;
+
+void UFO_Init(void) {
+  UFO.x = 0;
+  UFO.y = 10;
+  UFO.maxpoint[0] = UFO.x + ENEMYBONUSW;
+  UFO.maxpoint[1] = UFO.y + ENEMYBONUSH;
+  UFO.image[0] = SmallEnemyBonus0;
+  UFO.image[1] = SmallExplosion0;
+  UFO.life = 1;
+  UFO.deathCounter = 3;
+  Sound_Highpitch();
+}
+
+void UFO_Move(void) {
+  if (UFO.life > 0 && UFO.x < 126U) { // 126 = SCREENW-2
+    UFO.x += 3;
+    UFO.maxpoint[0] += 3;
+  } else {
+    UFO.life = 0;
+  }
+}
