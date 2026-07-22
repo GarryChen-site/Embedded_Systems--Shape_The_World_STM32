@@ -46,6 +46,28 @@
 #define STK_VAL (*((volatile uint32_t *)0xE000E018U))
 
 // =========================================================================
+// Game global variables
+// =========================================================================
+volatile uint32_t ADCdata = 0; // raw 12-bit ADC result
+volatile uint32_t playerPosition =
+    0; // converted to 0-110 (player ship is 18 pixel)
+volatile uint32_t playerFlag = 0;
+volatile uint32_t laserFlag = 0;
+volatile uint32_t missileFlag = 0;
+
+uint32_t FrameCount = 0; // toggles 0->1->0->1 (2 animation poses)
+uint32_t randomnum = 0;  // incremented by button press and game event
+uint32_t currentLevel = 1;
+uint32_t numEnemies = 8; // 4 top row + 4 bottom row
+
+uint32_t playMissile = 8; // index into Missile[8] (0~7 used for enemies)
+uint32_t playLaser = 8;   // index into Laser[8] (0~7 used for player)
+
+int32_t enemyDir = 1; // +1 = moving right, -1 = moving left
+uint32_t enemyDrop =
+    0; // pixels to drop down this frame (0 = no drop, 2 = drop)
+
+// =========================================================================
 // BMP image data — identical to original (hardware-independent raw bytes)
 // 4-bit indexed BMP, LM3S format; decoded by SSD1306_PrintBMP()
 // =========================================================================
