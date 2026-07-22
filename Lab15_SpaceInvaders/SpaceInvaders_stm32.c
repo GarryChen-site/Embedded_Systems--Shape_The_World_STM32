@@ -546,6 +546,12 @@ static uint32_t Conver(uint32_t sample) { return (110U * sample) / 4095U; }
 // =========================================================================
 // Capture BMP dimensions from header bytes (width=ptr[18], height=ptr[22])
 // =========================================================================
+#define ENEMY30W ((uint8_t)SmallEnemy30PointA[18])
+#define ENEMY30H ((uint8_t)SmallEnemy30PointA[22])
+#define ENEMY20W ((uint8_t)SmallEnemy20PointA[18])
+#define ENEMY20H ((uint8_t)SmallEnemy20PointA[22])
+#define ENEMY10W ((uint8_t)SmallEnemy10PointA[18])
+#define ENEMY10H ((uint8_t)SmallEnemy10PointA[22])
 #define ENEMYBONUSW ((uint8_t)SmallEnemyBonus0[18])
 #define ENEMYBONUSH ((uint8_t)SmallEnemyBonus0[22])
 // =========================================================================
@@ -585,5 +591,33 @@ void UFO_Move(void) {
     UFO.maxpoint[0] += 3;
   } else {
     UFO.life = 0;
+  }
+}
+
+void Enemy_Init(void) {
+  int i;
+  for (i = 0; i < (int)numEnemies; i++) {
+    Enemy[i].x = 15U * (uint32_t)(i % 4);
+    if (i < 4) {
+      Enemy[i].y = 10;
+      Enemy[i].maxpoint[0] = Enemy[i].x + ENEMY30W;
+      Enemy[i].maxpoint[1] = Enemy[i].y + ENEMY30H;
+      Enemy[i].image[0] = SmallEnemy30PointA;
+      Enemy[i].image[1] = SmallEnemy30PointB;
+    } else if (i >= 4 || i < 8) {
+      Enemy[i].y = 10 + ENEMY30H;
+      Enemy[i].maxpoint[0] = Enemy[i].x + ENEMY10W;
+      Enemy[i].maxpoint[1] = Enemy[i].y + ENEMY10H;
+      Enemy[i].image[0] = SmallEnemy10PointA;
+      Enemy[i].image[1] = SmallEnemy10PointB;
+    } else {
+      Enemy[i].y = 10 + ENEMY30H + ENEMY20H;
+      Enemy[i].maxpoint[0] = Enemy[i].x + ENEMY20W;
+      Enemy[i].maxpoint[1] = Enemy[i].y + ENEMY20H;
+      Enemy[i].image[0] = SmallEnemy20PointA;
+      Enemy[i].image[1] = SmallEnemy20PointB;
+    }
+    Enemy[i].life = 1;
+    Enemy[i].deathCounter = 3;
   }
 }
