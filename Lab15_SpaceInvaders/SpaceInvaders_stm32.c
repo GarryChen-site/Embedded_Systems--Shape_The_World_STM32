@@ -594,30 +594,70 @@ void UFO_Move(void) {
   }
 }
 
+// 8 enemies arranged in 2 rows × 4 columns near the top of the 128×64 screen
 void Enemy_Init(void) {
   int i;
   for (i = 0; i < (int)numEnemies; i++) {
+    // Spacing = 15 pixels. Enemy width = 16 pixels → enemies overlap by 1
+    // pixel, which is tight but intentional
     Enemy[i].x = 15U * (uint32_t)(i % 4);
-    if (i < 4) {
+    if (i < 4) { // row 0 - y=10 from top
       Enemy[i].y = 10;
-      Enemy[i].maxpoint[0] = Enemy[i].x + ENEMY30W;
-      Enemy[i].maxpoint[1] = Enemy[i].y + ENEMY30H;
-      Enemy[i].image[0] = SmallEnemy30PointA;
-      Enemy[i].image[1] = SmallEnemy30PointB;
+      // top-left     = (Enemy[i].x, Enemy[i].y)
+      // bottom-right = (Enemy[i].maxpoint[0], Enemy[i].maxpoint[1])
+      Enemy[i].maxpoint[0] = Enemy[i].x + ENEMY30W; // right edge = x + 16
+      Enemy[i].maxpoint[1] = Enemy[i].y + ENEMY30H; // bottom edge = y + 10
+      Enemy[i].image[0] = SmallEnemy30PointA;       // animation frame 0
+      Enemy[i].image[1] = SmallEnemy30PointB;       // animation frame 1
     } else if (i >= 4 || i < 8) {
-      Enemy[i].y = 10 + ENEMY30H;
+      Enemy[i].y = 10 + ENEMY30H; // row 1 - y=10+10=20
       Enemy[i].maxpoint[0] = Enemy[i].x + ENEMY10W;
       Enemy[i].maxpoint[1] = Enemy[i].y + ENEMY10H;
       Enemy[i].image[0] = SmallEnemy10PointA;
       Enemy[i].image[1] = SmallEnemy10PointB;
-    } else {
+    } else { // dead code (never reached with numEnumies=8)
       Enemy[i].y = 10 + ENEMY30H + ENEMY20H;
       Enemy[i].maxpoint[0] = Enemy[i].x + ENEMY20W;
       Enemy[i].maxpoint[1] = Enemy[i].y + ENEMY20H;
       Enemy[i].image[0] = SmallEnemy20PointA;
       Enemy[i].image[1] = SmallEnemy20PointB;
     }
-    Enemy[i].life = 1;
-    Enemy[i].deathCounter = 3;
+    Enemy[i].life = 1;         // alive
+    Enemy[i].deathCounter = 3; // 3 frames of death animation
+  }
+}
+
+void Enemy_Move(void) {
+  int i;
+  int minY = 64;
+  for (i = 0; i < (int)numEnemies; i++) {
+    Enemy[i].x += (uint32_t)enemyDir;           // horizontal: +1 right, -1 left
+    Enemy[i].maxpoint[0] += (uint32_t)enemyDir; // keep bounding box in sync
+    Enemy[i].y += enemyDrop;                    // vertical: 0=stay, 2=drop
+    Enemy[i].maxpoint[1] += enemyDrop;          // keep bouding box in sync
+    if ((int)Enemy[i].y < minY) {               // track highest enemy
+      minY = (int)Enemy[i].y;
+    }
+  }
+  // reset: drop only happens for exactly one frame
+  enemyDrop = 0;
+  for (i = 0; i < (int)numEnemies; i++) {
+    if (Enemy[i].life > 0) {
+      if (Enemy[i].maxpoint[0] >= 126U) {        // right edge hit right wall
+        enemyDir = (-1) * (int32_t)currentLevel; // reverse direction
+        enemyDrop = 2;                           // schedule a drop
+      }
+      if (Enemy[i].x <= 0U) { // left edge hit left wall
+        enemyDir = 1 * (int32_t)currentLevel;
+        enemyDrop = 2;
+      }
+    }
+  }
+
+  // enemies are not too close to the top
+  // no UFO already on screen
+  // rare random window
+  if (minY > 20 && UFO.life <= 0 && randomnum > 8 && randomnum <= 10) {
+    UFO_Init();
   }
 }
