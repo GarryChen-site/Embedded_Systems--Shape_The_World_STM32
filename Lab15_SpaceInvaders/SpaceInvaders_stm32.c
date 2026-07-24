@@ -556,6 +556,8 @@ static uint32_t Conver(uint32_t sample) { return (110U * sample) / 4095U; }
 #define ENEMY10H ((uint8_t)SmallEnemy10PointA[22])
 #define ENEMYBONUSW ((uint8_t)SmallEnemyBonus0[18])
 #define ENEMYBONUSH ((uint8_t)SmallEnemyBonus0[22])
+#define MISSILEW ((uint8_t)Missile0[18])
+#define MISSILEH ((uint8_t)Missile0[22])
 #define PLAYERW ((uint8_t)PlayerShip0[18])
 #define PLAYERH ((uint8_t)PlayerShip0[22])
 // =========================================================================
@@ -676,4 +678,55 @@ void Bunker_Init(void) {
   Bunker.image[2] = Bunker2; // heavily eroded
   Bunker.image[3] = Bunker3; // blank
   Bunker.life = 10;          // bunker survives exactly 5 enemy missiles
+}
+
+void Player_Init(void) {
+  Player.x = 55U;
+  Player.y = 63U;
+  Player.maxpoint[0] = Player.x + PLAYERW;
+  Player.maxpoint[1] = Player.y + PLAYERH;
+  Player.image[0] = PlayerShip0;
+  Player.image[1] = BigExplosion0;
+  Player.life = 20;
+  Player.deathCounter = 3;
+}
+
+void Player_Move(uint32_t position) {
+  Player.x = position;
+  Player.maxpoint[0] = Player.x + PLAYERW;
+}
+
+void Player_Missile_Init(void) {
+  // center of player ship
+  Missile[playMissile].x = Player.x + (PLAYERW / 2U);
+  // slightly above the player's base row
+  Missile[playMissile].y = Player.y - 4U;
+  // sets the right and bottom edges of the collision box
+  Missile[playMissile].maxpoint[0] = Missile[playMissile].x + MISSILEW;
+  Missile[playMissile].maxpoint[1] = Missile[playMissile].y + MISSILEH;
+  Missile[playMissile].image[0] = Missile0;
+  Missile[playMissile].image[1] = Missile2;
+  Missile[playMissile].life = 1;
+  Missile[playMissile].deathCounter = 3;
+}
+
+void Enemy_Missile_Init(void) {
+  int i;
+  for (i = 0; i < (int)numEnemies; i++) {
+    // randomnum ensures enemies don't all fire simultaneously,
+    if ((Enemy[i].life > 0) && (Missile[i].life <= 0) &&
+        ((i + 2) == (int)randomnum)) {
+      // only the front-row enemy in each column can fire.
+      if ((i >= 4) || (Enemy[i % 4].life <= 0)) {
+        Missile[i].x = Enemy[i].x + (ENEMY30W / 2U);
+        Missile[i].y = Enemy[i].y + 4U;
+        Missile[i].maxpoint[0] = Missile[i].x + MISSILEW;
+        Missile[i].maxpoint[1] = Missile[i].y + MISSILEH;
+        Missile[i].image[0] = Missile0;
+        Missile[i].image[1] = Missile2;
+        Missile[i].life = 1;
+        Missile[i].deathCounter = 3;
+      }
+    }
+  }
 }
