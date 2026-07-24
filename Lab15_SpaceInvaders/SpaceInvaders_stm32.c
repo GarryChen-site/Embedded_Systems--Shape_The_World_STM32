@@ -546,6 +546,8 @@ static uint32_t Conver(uint32_t sample) { return (110U * sample) / 4095U; }
 // =========================================================================
 // Capture BMP dimensions from header bytes (width=ptr[18], height=ptr[22])
 // =========================================================================
+#define BUNKERW ((uint8_t)Bunker0[18])
+#define BUNKERH ((uint8_t)Bunker0[22])
 #define ENEMY30W ((uint8_t)SmallEnemy30PointA[18])
 #define ENEMY30H ((uint8_t)SmallEnemy30PointA[22])
 #define ENEMY20W ((uint8_t)SmallEnemy20PointA[18])
@@ -554,6 +556,8 @@ static uint32_t Conver(uint32_t sample) { return (110U * sample) / 4095U; }
 #define ENEMY10H ((uint8_t)SmallEnemy10PointA[22])
 #define ENEMYBONUSW ((uint8_t)SmallEnemyBonus0[18])
 #define ENEMYBONUSH ((uint8_t)SmallEnemyBonus0[22])
+#define PLAYERW ((uint8_t)PlayerShip0[18])
+#define PLAYERH ((uint8_t)PlayerShip0[22])
 // =========================================================================
 // Game object initializers
 // =========================================================================
@@ -660,4 +664,16 @@ void Enemy_Move(void) {
   if (minY > 20 && UFO.life <= 0 && randomnum > 8 && randomnum <= 10) {
     UFO_Init();
   }
+}
+
+void Bunker_Init(void) {
+  Bunker.x = 55U;           // centered: (128-18)/2 = 55
+  Bunker.y = 63U - PLAYERH; // just above player (63 = bottom)
+  Bunker.maxpoint[0] = Bunker.x + BUNKERW;
+  Bunker.maxpoint[1] = Bunker.y + BUNKERH;
+  Bunker.image[0] = Bunker0; // full bunker
+  Bunker.image[1] = Bunker1; // slight damage craters
+  Bunker.image[2] = Bunker2; // heavily eroded
+  Bunker.image[3] = Bunker3; // blank
+  Bunker.life = 10;          // bunker survives exactly 5 enemy missiles
 }
