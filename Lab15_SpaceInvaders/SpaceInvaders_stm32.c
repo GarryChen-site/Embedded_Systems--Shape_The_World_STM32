@@ -713,7 +713,10 @@ void Player_Missile_Init(void) {
 void Enemy_Missile_Init(void) {
   int i;
   for (i = 0; i < (int)numEnemies; i++) {
-    // randomnum ensures enemies don't all fire simultaneously,
+    // randomnum ensures enemies don't all fire simultaneously
+    // (i + 2) keep missile and laser offsets different
+    // the shared randomnum approach makes simultaneous firing mathematically
+    // impossible
     if ((Enemy[i].life > 0) && (Missile[i].life <= 0) &&
         ((i + 2) == (int)randomnum)) {
       // only the front-row enemy in each column can fire.
@@ -727,6 +730,27 @@ void Enemy_Missile_Init(void) {
         Missile[i].life = 1;
         Missile[i].deathCounter = 3;
       }
+    }
+  }
+}
+
+void Missile_Move(void) {
+  if ((Missile[playMissile].life == 1) && (Missile[playMissile].y <= 64U)) {
+    Missile[playMissile].y -= 3U;
+    Missile[playMissile].maxpoint[1] -= 3U;
+  } else {
+    Missile[playMissile].life = 0;
+  }
+}
+
+void Enemy_Missile_Move(void) {
+  int i;
+  for (i = 0; i < (int)numEnemies; i++) {
+    if ((Missile[i].life == 1) && (Missile[i].y <= 64U)) {
+      Missile[i].y += 3U;
+      Missile[i].maxpoint[1] += 3U;
+    } else {
+      Missile[i].life = 0;
     }
   }
 }
