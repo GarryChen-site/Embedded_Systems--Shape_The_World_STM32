@@ -556,6 +556,8 @@ static uint32_t Conver(uint32_t sample) { return (110U * sample) / 4095U; }
 #define ENEMY10H ((uint8_t)SmallEnemy10PointA[22])
 #define ENEMYBONUSW ((uint8_t)SmallEnemyBonus0[18])
 #define ENEMYBONUSH ((uint8_t)SmallEnemyBonus0[22])
+#define LASERW ((uint8_t)Laser0[18])
+#define LASERH ((uint8_t)Laser0[22])
 #define MISSILEW ((uint8_t)Missile0[18])
 #define MISSILEH ((uint8_t)Missile0[22])
 #define PLAYERW ((uint8_t)PlayerShip0[18])
@@ -751,6 +753,58 @@ void Enemy_Missile_Move(void) {
       Missile[i].maxpoint[1] += 3U;
     } else {
       Missile[i].life = 0;
+    }
+  }
+}
+
+void Player_Laser_Init(void) {
+  Laser[playLaser].x = Player.x + (PLAYERW / 2U);
+  Laser[playLaser].y = Player.y - 4U;
+  Laser[playLaser].maxpoint[0] = Laser[playLaser].x + LASERW;
+  Laser[playLaser].maxpoint[1] = Laser[playLaser].y + LASERH;
+  Laser[playLaser].image[0] = Laser0;
+  Laser[playLaser].image[1] = Laser1;
+  Laser[playLaser].life = 1;
+  Laser[playLaser].deathCounter = 3;
+  Sound_Shoot();
+}
+
+void Enemy_Laser_Init(void) {
+  int i;
+  for (i = 0; i < (int)numEnemies; i++) {
+    if ((Enemy[i].life > 0) && (Laser[i].life <= 0) &&
+        ((i + 3) == (int)randomnum)) {
+      if ((i >= 4) || (Enemy[i % 4].life <= 0)) {
+        Laser[i].x = Enemy[i].x + (ENEMY30W / 2U);
+        Laser[i].y = Enemy[i].y + 4U;
+        Laser[i].maxpoint[0] = Laser[i].x + LASERW;
+        Laser[i].maxpoint[1] = Laser[i].y + LASERH;
+        Laser[i].image[0] = Laser0;
+        Laser[i].image[1] = Laser1;
+        Laser[i].life = 1;
+        Laser[i].deathCounter = 3;
+      }
+    }
+  }
+}
+
+void Laser_Move(void) {
+  if ((Laser[playLaser].life == 1) && (Laser[playLaser].y <= 64U)) { // was 48
+    Laser[playLaser].y -= 4U;
+    Laser[playLaser].maxpoint[1] -= 4U;
+  } else {
+    Laser[playLaser].life = 0;
+  }
+}
+
+void Enemy_Laser_Move(void) {
+  int i;
+  for (i = 0; i < (int)numEnemies; i++) {
+    if ((Laser[i].life == 1) && (Laser[i].y <= 64U)) { // was 48
+      Laser[i].y += 4U;
+      Laser[i].maxpoint[1] += 4U;
+    } else {
+      Laser[i].life = 0;
     }
   }
 }
