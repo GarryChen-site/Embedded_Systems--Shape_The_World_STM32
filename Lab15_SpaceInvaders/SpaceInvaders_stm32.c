@@ -808,3 +808,45 @@ void Enemy_Laser_Move(void) {
     }
   }
 }
+
+// =============================
+// Check_Damage - collision detection
+// =============================
+void Check_Damage(void) {
+  int i, j;
+
+  // enemy missiles / lasers vs bunker
+  for (j = 0; j < (int)numEnemies; j++) {
+    // bunker's collision box is 2 pixels wider on each side
+    // only the bottom 10 rows of the bunker receive enemy fire
+    if ((Missile[j].life == 1) && (Bunker.life > 0) &&
+        ((Bunker.x - 2U) <= Missile[j].x) &&
+        (Missile[j].x <= (Bunker.maxpoint[0] + 2U)) &&
+        ((Bunker.y + 10U) <= Missile[j].maxpoint[1])) {
+      Bunker.life -= 2;
+      Missile[j].life = 0;
+    }
+    if ((Laser[j].life == 1) && (Bunker.life > 0) &&
+        ((Bunker.x - 2U) <= Laser[j].x) &&
+        (Laser[j].x <= (Bunker.maxpoint[0] + 2U)) &&
+        ((Bunker.y + 10U) <= Laser[j].maxpoint[1])) {
+      Bunker.life -= 1;
+      Laser[j].life = 0;
+    }
+  }
+  // player missile vs bunker
+  // the player fires upward and
+  // the missile/laser bottom would hit the bunker from below.
+  if ((Missile[playMissile].life == 1) && (Bunker.life > 0) &&
+      ((Bunker.x - 2U) <= Missile[playMissile].x) &&
+      (Missile[playMissile].x <= (Bunker.maxpoint[0] + 2U))) {
+    Bunker.life -= 2;
+    Missile[playMissile].life = 0;
+  }
+  // player laser vs bunker
+  if ((Laser[playMissile].life == 1) && (Bunker.life > 0) &&
+      ((Bunker.x - 2U) <= Laser[playLaser].x) &&
+      (Laser[playLaser].x <= (Bunker.maxpoint[0] + 2U))) {
+    Bunker.life -= 1;
+  }
+}
