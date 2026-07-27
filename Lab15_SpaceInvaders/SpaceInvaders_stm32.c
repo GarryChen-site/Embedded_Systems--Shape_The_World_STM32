@@ -1,4 +1,5 @@
 #include "sound_stm32.h"
+#include "ssd1306.h"
 #include <stdint.h>
 
 // =========================================================================
@@ -809,9 +810,9 @@ void Enemy_Laser_Move(void) {
   }
 }
 
-// =============================
+// =========================================================================
 // Check_Damage - collision detection
-// =============================
+// =========================================================================
 void Check_Damage(void) {
   int i, j;
 
@@ -953,4 +954,66 @@ void Check_Damage(void) {
       UFO.deathCounter--;
     }
   }
+}
+
+// =========================================================================
+// Draw - clear buffer, blit all sprites, push to OLED
+// =========================================================================
+void Draw(void) {
+  int i;
+  SSD1306_ClearBuffer();
+  Check_Damage();
+
+  // enemies
+  for (i = 0; i < (int)numEnemies; i++) {
+    if (Enemy[i].life > 0) {
+      SSD1306_PrintBMP(Enemy[i].x, Enemy[i].y, Enemy[i].image[FrameCount], 0);
+    } else if (Enemy[i].deathCounter > 0) {
+      SSD1306_PrintBMP(Enemy[i].x, Enemy[i].y, Enemy[i].image[0], 0);
+    } else {
+      SSD1306_PrintBMP(Enemy[i].x, Enemy[i].y, Enemy[i].image[1], 0);
+    }
+  }
+
+  // bunker
+  if (Bunker.life >= 7) {
+    SSD1306_PrintBMP(Bunker.x, Bunker.y, Bunker.image[0], 0);
+  } else if (Bunker.life >= 4) {
+    SSD1306_PrintBMP(Bunker.x, Bunker.y, Bunker.image[1], 0);
+  } else if (Bunker.life >= 1) {
+    SSD1306_PrintBMP(Bunker.x, Bunker.y, Bunker.image[2], 0);
+  } else {
+    SSD1306_PrintBMP(Bunker.x, Bunker.y, Bunker.image[3], 0);
+  }
+
+  // player
+  if (Player.life > 0) {
+    SSD1306_PrintBMP(Player.x, Player.y, Player.image[0], 0);
+  } else if (Player.deathCounter > 0) {
+    SSD1306_PrintBMP(Player.x, Player.y, Player.image[0], 0);
+  } else {
+    SSD1306_PrintBMP(Player.x, Player.y, Player.image[1], 0);
+  }
+
+  // UFO
+  if (UFO.life > 0) {
+    SSD1306_PrintBMP(UFO.x, UFO.y, UFO.image[0], 0);
+  } else if (UFO.deathCounter > 0) {
+    SSD1306_PrintBMP(UFO.x, UFO.y, UFO.image[0], 0);
+  } else {
+    SSD1306_PrintBMP(UFO.x, UFO.y, UFO.image[1], 0);
+  }
+
+  // missiles and lasers
+  for (i = 0; i < (int)(numEnemies + 1U); i++) {
+    if (Missile[i].life == 1) {
+      SSD1306_PrintBMP(Missile[i].x, Missile[i].y, Missile[i].image[0], 0);
+    }
+    if (Laser[i].life == 1) {
+      SSD1306_PrintBMP(Laser[i].x, Laser[i].y, Laser[i].image[0], 0);
+    }
+  }
+  SSD1306_DisplayBuffer();
+  FrameCount =
+      (FrameCount + 1U) & 0x1U; // each enemy has exactly 2 animation poses.
 }
