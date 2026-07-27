@@ -849,4 +849,108 @@ void Check_Damage(void) {
       (Laser[playLaser].x <= (Bunker.maxpoint[0] + 2U))) {
     Bunker.life -= 1;
   }
+
+  // enemy missiles/lasers vs player
+  for (j = 0; j < (int)numEnemies; j++) {
+    if ((Missile[j].life == 1) && (Player.life > 0) &&
+        (Player.x <= Missile[j].x) && (Missile[j].x <= Player.maxpoint[0]) &&
+        (Player.y <= Missile[j].maxpoint[1])) {
+      Player.life -= 2;
+      Missile[j].life = 0;
+      Sound_Explosion();
+    }
+
+    if ((Laser[j].life == 1) && (Player.life > 0) && (Player.x <= Laser[j].x) &&
+        (Laser[j].x <= Player.maxpoint[0]) &&
+        (Player.y <= Laser[j].maxpoint[1])) {
+      Player.life -= 1;
+      Laser[j].life = 0;
+      Sound_Explosion();
+    }
+  }
+
+  // player missile/laser vs enemies
+  for (i = 0; i < (int)numEnemies; i++) {
+    if ((Missile[playMissile].life == 1) && (Enemy[i].life > 0) &&
+        (Enemy[i].x <= Missile[playMissile].x) &&
+        (Missile[playMissile].x <= Enemy[i].maxpoint[0]) &&
+        (Enemy[i].y <= Missile[playMissile].y) &&
+        (Missile[playMissile].y <= Enemy[i].maxpoint[1])) {
+      Enemy[i].life -= 1;
+      Missile[playMissile].life = 0;
+      Sound_Killed();
+    }
+    if ((Laser[playLaser].life == 1) && (Enemy[i].life > 0) &&
+        (Enemy[i].x <= Laser[playLaser].x) &&
+        (Laser[playLaser].x <= Enemy[i].maxpoint[0]) &&
+        (Enemy[i].y <= Laser[playLaser].y) &&
+        (Laser[playLaser].y <= Enemy[i].maxpoint[1])) {
+      Enemy[i].life -= 1;
+      Laser[playLaser].life = 0;
+      Sound_Killed();
+    }
+    if (Enemy[i].life <= 0) {
+      Enemy[i].image[0] = SmallExplosion0;
+      Enemy[i].image[1] = SmallExplosion1;
+      if (Enemy[i].deathCounter > 0) {
+        Enemy[i].deathCounter--;
+      }
+    }
+  }
+
+  // player missile/laser vs enemy missiles/lasers
+  for (i = 0; i < (int)numEnemies; i++) {
+    if ((Missile[playMissile].life == 1) &&
+        (Missile[i].x <= Missile[playMissile].x) &&
+        (Missile[playMissile].x <= Missile[i].maxpoint[0]) &&
+        (Missile[i].y <= Missile[playMissile].y) &&
+        (Missile[playMissile].y <= Missile[i].maxpoint[1])) {
+      Missile[i].life = 0;
+      Missile[playMissile].life = 0;
+    }
+    if ((Laser[playLaser].life == 1) && (Laser[i].x <= Laser[playLaser].x) &&
+        (Laser[playLaser].x <= Laser[i].maxpoint[0]) &&
+        (Laser[i].y <= Laser[playLaser].y) &&
+        (Laser[playLaser].y <= Laser[i].maxpoint[1])) {
+      Laser[i].life = 0;
+      Laser[playLaser].life = 0;
+    }
+  }
+
+  // player death state
+  if (Player.life <= 0) {
+    Player.image[0] = BigExplosion0;
+    Player.image[1] = BigExplosion1;
+    if (Player.deathCounter > 0) {
+      Player.deathCounter--;
+    }
+  }
+
+  // player missile/laser vs UFO
+  if ((Missile[playMissile].life == 1) && (UFO.life > 0) &&
+      (UFO.x <= Missile[playMissile].x) &&
+      (Missile[playMissile].x <= UFO.maxpoint[0]) &&
+      (UFO.y <= Missile[playMissile].y) &&
+      (Missile[playMissile].y <= UFO.maxpoint[1])) {
+    UFO.life -= 2;
+    Missile[playMissile].life = 0;
+    Sound_Killed();
+  }
+  if ((Laser[playLaser].life == 1) && (UFO.life > 0) &&
+      (UFO.x <= Laser[playLaser].x) &&
+      (Laser[playLaser].x <= UFO.maxpoint[0]) &&
+      (UFO.y <= Laser[playLaser].y) &&
+      (Laser[playLaser].y <= UFO.maxpoint[1])) {
+    UFO.life -= 1;
+    Laser[playLaser].life = 0;
+    Sound_Killed();
+  }
+
+  if (UFO.life <= 0) {
+    UFO.image[0] = SmallExplosion0;
+    UFO.image[1] = SmallExplosion1;
+    if (UFO.deathCounter > 0) {
+      UFO.deathCounter--;
+    }
+  }
 }
