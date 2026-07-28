@@ -1060,3 +1060,38 @@ static void Game_Over(void) {
     // do nothing (halt)
   }
 }
+
+// =========================================================================
+// Level_Check - advance level or trigger Game Over
+// =========================================================================
+static void Level_check(void) {
+  int i;
+  int enemiesDead = 0;
+  if (Player.life <= 0 && Player.deathCounter <= 0) {
+    Game_Over();
+  }
+  for (i = 0; i < (int)numEnemies; i++) {
+    if (Enemy[i].life <= 0) {
+      enemiesDead++;
+    }
+    if ((Enemy[i].maxpoint[1] >= Player.y) && (Enemy[i].life > 0)) {
+      Game_Over();
+    }
+
+    if (enemiesDead == (int)numEnemies) {
+      currentLevel++;
+      enemyDir = (int32_t)currentLevel;
+      Delay100ms(2);
+      SSD1306_Clear();
+      SSD1306_SetCursor(3, 2);
+      SSD1306_OutString("LEVEL");
+      SSD1306_SetCursor(10, 2);
+      SSD1306_OutUDec((uint16_t)currentLevel);
+      SSD1306_DisplayBuffer();
+      Delay100ms(5);
+      Enemy_Init();
+      Bunker_Init();
+      Player_Init();
+    }
+  }
+}
