@@ -1042,3 +1042,21 @@ static void Delay1ms(uint32_t msec) {
     msec--;
   }
 }
+
+// =========================================================================
+// Game_Over - freeze display with "GAME OVER" message
+// =========================================================================
+static void Game_Over(void) {
+  Delay100ms(2);
+  SSD1306_Clear();
+  SSD1306_SetCursor(2, 2);
+  SSD1306_OutString("GAME OVER");
+  SSD1306_SetCursor(2, 4);
+  SSD1306_OutString("Nice try,");
+  SSD1306_SetCursor(2, 5);
+  SSD1306_OutString("Earthling!");
+  SSD1306_DisplayBuffer();
+  while (1) {
+    // do nothing (halt)
+  }
+}
