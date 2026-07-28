@@ -1017,3 +1017,28 @@ void Draw(void) {
   FrameCount =
       (FrameCount + 1U) & 0x1U; // each enemy has exactly 2 animation poses.
 }
+
+// =========================================================================
+// Delay functions (loop counts scaled for 16 MHz)
+// Dalay100ms: 145000 iterations ~ 100ms
+// Delay1ms: 2667 iterations ~ 1ms
+// =========================================================================
+static void Delay100ms(uint32_t count) {
+  while (count > 0U) {
+    volatile uint32_t t = 145000U;
+    while (t) {
+      t--;
+    }
+    count--;
+  }
+}
+
+static void Delay1ms(uint32_t msec) {
+  while (msec > 0U) {
+    volatile uint32_t t = 2667U;
+    while (t) {
+      t--;
+    }
+    msec--;
+  }
+}
