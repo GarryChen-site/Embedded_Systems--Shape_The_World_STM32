@@ -542,7 +542,7 @@ static void Switch_Init(void) {
 // =========================================================================
 // Convert - ADC 12-bit -> player X position
 // =========================================================================
-static uint32_t Conver(uint32_t sample) { return (110U * sample) / 4095U; }
+static uint32_t Convert(uint32_t sample) { return (110U * sample) / 4095U; }
 
 // =========================================================================
 // Capture BMP dimensions from header bytes (width=ptr[18], height=ptr[22])
@@ -1092,6 +1092,38 @@ static void Level_check(void) {
       Enemy_Init();
       Bunker_Init();
       Player_Init();
+    }
+  }
+}
+
+// =========================================================================
+// SysTick_Handler = fires at 30 Hz; reads ADC, updats player position
+// =========================================================================
+void SysTick_Handler(void) {
+  ADCdata = ADC0_In();
+  playerPosition = Convert(ADCdata);
+  playerFlag = 1;
+}
+
+// =========================================================================
+// EXTI9_5_IRQHandler - fire buttons PC6 (missile) and PC8 (laser)
+// =========================================================================
+void EXTI9_5_IRQHandler(void) {
+  // writing a 1 to the bit position you want to clear.
+  uint32_t pr = EXTI_PR;
+  EXTI_PR = pr;
+
+  if (pr & (1U << 6)) {
+    if (Missile[playMissile].life <= 0) {
+      missileFlag = 1;
+      randomnum += 3U;
+    }
+  }
+
+  if (pr & (1U << 8)) {
+    if (Laser[playLaser].life <= 0) {
+      laserFlag = 1;
+      randomnum += 5U;
     }
   }
 }
