@@ -1,3 +1,4 @@
+#include "random.h"
 #include "sound_stm32.h"
 #include "ssd1306.h"
 #include <stdint.h>
@@ -1125,5 +1126,63 @@ void EXTI9_5_IRQHandler(void) {
       laserFlag = 1;
       randomnum += 5U;
     }
+  }
+}
+
+// =========================================================================
+// main
+// =========================================================================
+int main(void) {
+  // Initialize peripherals
+  Sound_Init();   // DAC on PB3-PB6
+  SSD1306_Init(); // OLED via I2C1 PB8/PB9
+  ADC0_Init();    // trimmer pot on PA0
+  Switch_Init();  // fire buttons PC6/PC8
+  Random_Init(1U);
+  SysTick_Init_30Hz(); // 30 Hz game timer
+
+  // Initialize game world
+  SSD1306_ClearBuffer();
+  SSD1306_DisplayBuffer();
+  currentLevel = 1U;
+  enemyDir = 1;
+  Enemy_Init();
+  Bunker_Init();
+  Player_Init();
+  Draw();
+
+  // main game loop
+  while (1) {
+    randomnum = (Random32() >> 24) % 60U;
+
+    Enemy_Missile_Init();
+    Enemy_Laser_Init();
+    Enemy_Missile_Move();
+    Enemy_Laser_Move();
+    Level_check();
+
+    if (playerFlag) {
+      Player_Move(playerPosition);
+      playerFlag = 0;
+    }
+    if (missileFlag) {
+      Player_Missile_Init();
+      missileFlag = 0;
+    }
+    if (laserFlag) {
+      Player_Laser_Init();
+      laserFlag = 0;
+    }
+    if (Missile[playMissile].life > 0) {
+      Missile_Move();
+    }
+    if (Laser[playLaser].life > 0) {
+      Laser_Move();
+    }
+
+    Enemy_Move();
+    UFO_Move();
+    Draw();
+    Delay1ms(25U); // ~25 ms frame pacing (I2C display update adds more)
   }
 }
