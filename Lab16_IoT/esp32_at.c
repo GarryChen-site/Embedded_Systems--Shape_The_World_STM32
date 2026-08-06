@@ -1,4 +1,5 @@
 #include "esp32_at.h"
+#include <string.h>
 // ============================================================
 // Register definitions
 // ============================================================
@@ -41,6 +42,47 @@ static void delay_ms(uint32_t ms) {
   }
 }
 
+// Send one character on USART1(blocking)
+static void usart1_putc(char c) {
+  while (!(USART1_SR & USART_SR_TXE))
+    ;
+  USART1_DR = (uint32_t)(uint8_t)c;
+}
+
+// Send null-terminated string on USART1
+static void usart1_puts(const char *s) {
+  while (*s) {
+    usart1_putc(*s++);
+  }
+}
+
+// Spin-receive until 'token' appears in the incomming byte strea,
+// or until timeout_ms milliseconds elapse;
+// Returns 1 on match, 0 on timeout
+static int wait_for(const char *token, uint32_t timeout_ms) {
+  uint32_t tok_len = (uint32_t)strlen(token);
+  uint32_t match = 0U;
+
+  uint32_t total_loops = timeout_ms * 4000U;
+  char ch;
+
+  while (total_loops > 0U) {
+    if (USART1_SR & USART_SR_RXNE) {
+      ch = (char)(USART1_DR & 0xFFU);
+      if (ch == token[match]) {
+        match++;
+        if (match == tok_len) {
+          return 1;
+        }
+      } else {
+        match = (ch == token[0]) ? 1U : 0U;
+      }
+    }
+    total_loops--;
+  }
+  return 0;
+}
+
 // ============================================================
 // Public API
 // ============================================================
@@ -63,4 +105,35 @@ void ESP32_Init(void) {
   USART1_CR1 = 0U;
   USART1_BRR = 0x008BU;
   USART1_CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_UE;
+
+  delay_ms(200U);
+}
+
+// ============================================================
+// ESP32_ConnectWiFi - reset ESP32, set station mode, join AP
+// ============================================================
+int ESP32_ConnectWiFi(const char *ssid, const char *pw) {
+  // Reset ESP32
+  usart1_puts("AT+RST\r\n");
+  if (!wait_for("ready", 5000U)) {
+    return -1;
+  }
+
+  // Station mode
+  usart1_puts("AT+CWMODE=1\r\n");
+  if (!wait_for("OK", 2000U)) {
+    return -2;
+  }
+
+  // Join AP
+  usart1_puts("AT+CWJAP=\"");
+  usart1_puts(ssid);
+  usart1_puts("\",\"");
+  usart1_puts(pw);
+  usart1_puts("\"\r\n");
+  if (!wait_for("WIFI GOT IP", 20000U)) {
+    return -3;
+  }
+
+  return 0;
 }
