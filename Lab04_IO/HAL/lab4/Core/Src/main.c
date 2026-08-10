@@ -97,6 +97,8 @@ int main(void) {
   /* USER CODE BEGIN WHILE */
   while (1) {
     /* USER CODE END WHILE */
+    // 0. PC12 configured as Input pin with internal pull-up
+
     // 1. Read the current state of the two switches
     GPIO_PinState sw1 = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13);
     GPIO_PinState sw2 = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_12);
