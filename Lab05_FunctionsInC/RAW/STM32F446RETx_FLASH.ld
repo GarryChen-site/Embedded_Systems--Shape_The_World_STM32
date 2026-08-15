@@ -32,6 +32,12 @@ SECTIONS {
         . = ALIGN(4);
     } >FLASH
 
+    /* When GCC compiles any function, it may generate stack-unwinding metadata
+     * so that if an exception (or a fault handler) needs to walk back up the call
+     * stack, it knows how to undo each stack frame. 
+     * the ARM EABI requires these tables to be present and reachable in Flash
+     */
+
     .ARM.extab : {
         . = ALIGN(4);
         *(.ARM.extab* .gnu.linkonce.armextab.*)
@@ -53,6 +59,17 @@ SECTIONS {
         PROVIDE_HIDDEN (__preinit_array_end = .);
         . = ALIGN(4);
     } >FLASH
+    
+    /* An array of function pointers that GCC places in Flash. A startup
+     * routine iterates through this array and calls each function before
+     * main() runs. In C++ it holds static constructors. In C it drives:
+     * - Functions marked __attribute__((constructor))
+     * - newlib's __libc_init_array()  
+     * Newlib's printf needs the FILE structures (stdout, stdin, stderr) to be
+     * initialized before the first call. Newlib registers this initialization in
+     * .init_array. The startup code is supposed to call __libc_init_array()
+     * which iterates the array.
+     */
 
     .init_array : {
         . = ALIGN(4);
@@ -63,6 +80,12 @@ SECTIONS {
         . = ALIGN(4);
     } >FLASH
 
+    /* The mirror image of .init_array. Called by __libc_fini_array()
+     * after main() returns (via exit()). In C++ it holds static destructors.
+     * In C it drives functions marked __attribute__((destructor)).
+     * Same reason as .init_array — newlib generates entries here
+     * even if nothing of yours uses it. The linker needs a home for them.
+     */
     .fini_array : {
         . = ALIGN(4);
         PROVIDE_HIDDEN (__fini_array_start = .);
