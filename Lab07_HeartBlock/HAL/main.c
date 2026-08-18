@@ -51,7 +51,19 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
+
+// Subroutine reads AS input and waits for signal to be low
+// If AS is already low, it returns right away
+// If AS is currently high, it will wait until it to go low
+// Inputs:  None
+// Outputs: None
 void WaitForASLow(void);
+
+// Subroutine reads AS input and waits for signal to be high
+// If AS is already high, it returns right away
+// If AS is currently low, it will wait until it to go high
+// Inputs:  None
+// Outputs: None
 void WaitForASHigh(void);
 /* USER CODE END PFP */
 
@@ -96,24 +108,44 @@ int main(void) {
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+  // Ready HIGH ──→ wait for press ──→ Ready LOW ──→ debounce 10ms
+  // ──→ wait for release ──→ 250ms delay ──→ VT pulse (250ms wide) ──→ repeat
+  // It's a classic handshake + debounce pattern: the Ready signal tells the
+  // outside world the system is listening, AS is the trigger input, and VT is
+  // the confirmed, clean output pulse.
+
+  // Ready GPIO Pin: PA5
+  // AS GPIO Pin: PC13
+  // VT GPIO Pin: PA6
   while (1) {
     /* USER CODE END WHILE */
+
+    // Make the Ready signal go high
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
 
+    // Wait for AS to be 0, switch to be pressed
     WaitForASLow();
 
+    // Make the Ready signal go low
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
 
+    // Wait 10ms
     HAL_Delay(10);
 
+    // Wait for AS to be 1, switch to be released
     WaitForASHigh();
 
+    // Wait 250ms
     HAL_Delay(250);
 
+    // Make the VT signal go high
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET);
 
+    // Wait 250ms
     HAL_Delay(250);
 
+    // Make the VT signal go low
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET);
 
     /* USER CODE BEGIN 3 */
