@@ -91,6 +91,7 @@ int main(void) {
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
+  /* 1. LED starts ON (PA6 output high) */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET);
 
   /* USER CODE END 2 */
@@ -99,13 +100,19 @@ int main(void) {
   /* USER CODE BEGIN WHILE */
   while (1) {
     /* USER CODE END WHILE */
+
+    /* 2. Wait 100 ms */
     HAL_Delay(100);
 
+    /* Read switch state (PC12) */
     GPIO_PinState switchState = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_12);
 
+    /* 3 switch state judgment */
     if (switchState == GPIO_PIN_SET) {
+      /* If switch is pressed (PC12 = 1) -> TOGGLE LED */
       HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_6);
     } else {
+      /* If switch is released (PC12 = 0) -> LED ON */
       HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET);
     }
 
