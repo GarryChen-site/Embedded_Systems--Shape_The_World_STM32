@@ -280,6 +280,17 @@ void LED_Off(void) {
 }
 
 // =========================================================================
+// switch_pressed
+// Returns 1 if SW1 (PC13) OR SW2 (PC12) is pressed (active LOW).
+// Mirrors: if ((SW1 == 0x00) || (SW2 == 0x00))
+// =========================================================================
+uint32_t switch_pressed(void) {
+  uint32_t sw1 = GPIOC_IDR & PC13_IDR; // 0 = pressed
+  uint32_t sw2 = GPIOC_IDR & PC12_IDR; // 0 = pressed
+  return (sw1 == 0) || (sw2 == 0);     // 1 if either is pressed
+}
+
+// =========================================================================
 // MAIN
 // =========================================================================
 int main(void) {
