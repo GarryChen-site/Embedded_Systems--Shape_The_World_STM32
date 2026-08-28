@@ -4,6 +4,38 @@
 /* USER CODE BEGIN Includes */
 
 /* =========================================================================
+ * PIN DEFINITIONS
+ * ========================================================================= */
+
+/* --- Traffic light outputs --- */
+#define EW_RED_Pin GPIO_PIN_5 /* PB5  D4  */
+#define EW_RED_Port GPIOB
+#define EW_YELLOW_Pin GPIO_PIN_4 /* PB4  D5  */
+#define EW_YELLOW_Port GPIOB
+#define EW_GREEN_Pin GPIO_PIN_10 /* PB10 D6  */
+#define EW_GREEN_Port GPIOB
+#define NS_RED_Pin GPIO_PIN_8 /* PA8  D7  */
+#define NS_RED_Port GPIOA
+#define NS_YELLOW_Pin GPIO_PIN_9 /* PA9  D8  */
+#define NS_YELLOW_Port GPIOA
+#define NS_GREEN_Pin GPIO_PIN_7 /* PC7  D9  */
+#define NS_GREEN_Port GPIOC
+
+/* --- Walk light outputs --- */
+#define WALK_Pin GPIO_PIN_6 /* PB6  D10  green LED */
+#define WALK_Port GPIOB
+#define DONTWALK_Pin GPIO_PIN_7 /* PA7  D11  red LED   */
+#define DONTWALK_Port GPIOA
+
+/* --- Sensor inputs (active HIGH: 10kΩ pull-down, switch to 3.3V) --- */
+#define EW_SENSOR_Pin GPIO_PIN_6 /* PA6  D12 */
+#define EW_SENSOR_Port GPIOA
+#define NS_SENSOR_Pin GPIO_PIN_10 /* PA10 D2  */
+#define NS_SENSOR_Port GPIOA
+#define PED_SENSOR_Pin GPIO_PIN_3 /* PB3  D3  */
+#define PED_SENSOR_Port GPIOB
+
+/* =========================================================================
  * STATE IDENTIFIERS
  * One name per FSM state — used in the next[] arrays instead of raw numbers.
  * The enum values 0-10 match the FSM[] array indices exactly.
