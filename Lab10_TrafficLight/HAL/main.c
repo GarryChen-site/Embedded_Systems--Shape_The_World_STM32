@@ -274,6 +274,36 @@ int main(void) {
   /* USER CODE BEGIN WHILE */
   uint8_t state = 0; /* FSM starts in state 0: EW green             */
 
+  /* ---- LED WIRING TEST: each LED on for 300ms in sequence ---- */
+  GPIO_TypeDef *led_ports[] = {EW_RED_PORT, EW_YELLOW_PORT, EW_GREEN_PORT,
+                               NS_RED_PORT, NS_YELLOW_PORT, NS_GREEN_PORT,
+                               WALK_PORT,   DONTWALK_PORT};
+  uint16_t led_pins[] = {EW_RED_PIN, EW_YELLOW_PIN, EW_GREEN_PIN,
+                         NS_RED_PIN, NS_YELLOW_PIN, NS_GREEN_PIN,
+                         WALK_PIN,   DONTWALK_PIN};
+  for (int k = 0; k < 8; k++) {
+    HAL_GPIO_WritePin(led_ports[k], led_pins[k], GPIO_PIN_SET);
+    HAL_Delay(300);
+    HAL_GPIO_WritePin(led_ports[k], led_pins[k], GPIO_PIN_RESET);
+    HAL_Delay(100);
+  }
+  /* ---- END LED TEST ---- */
+
+  /* ---- SWITCH TEST: press each switch, its LED lights ---- */
+  /* EW_SENSOR  → lights EW_GREEN  */
+  /* NS_SENSOR  → lights NS_GREEN  */
+  /* PED_SENSOR → lights WALK      */
+  uint32_t test_end = HAL_GetTick() + 10000; /* 10 second test window */
+  while (HAL_GetTick() < test_end) {
+    HAL_GPIO_WritePin(EW_GREEN_PORT, EW_GREEN_PIN,
+                      HAL_GPIO_ReadPin(EW_SENSOR_PORT, EW_SENSOR_PIN));
+    HAL_GPIO_WritePin(NS_GREEN_PORT, NS_GREEN_PIN,
+                      HAL_GPIO_ReadPin(NS_SENSOR_PORT, NS_SENSOR_PIN));
+    HAL_GPIO_WritePin(WALK_PORT, WALK_PIN,
+                      HAL_GPIO_ReadPin(PED_SENSOR_PORT, PED_SENSOR_PIN));
+  }
+  /* ---- END SWITCH TEST ---- */
+
   while (1) {
     apply_traffic(FSM[state].traffic, FSM[state].walk); /* set LEDs */
     HAL_Delay(FSM[state].time_ms);                      /* wait     */
