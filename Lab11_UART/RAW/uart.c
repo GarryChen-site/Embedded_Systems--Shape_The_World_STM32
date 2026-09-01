@@ -1,6 +1,55 @@
-
+// uart.c
+// Lab 11 UART — STM32 F446RE Nucleo Port
+//
+// Original: TM4C123 UART0 on PA0(RX)/PA1(TX) via USB debug cable
+// Ported to: STM32 USART2 on PA2(TX)/PA3(RX) via ST-LINK Virtual COM Port
+//
+// -------------------------------------------------------------------------
+// KEY DIFFERENCE FROM TM4C:
+//
+//   TM4C UART0                     STM32 USART2
+//   ────────────────────────────   ────────────────────────────────────
+//   PA0 = U0Rx, PA1 = U0Tx         PA2 = USART2_TX, PA3 = USART2_RX
+//   Clock: SYSCTL_RCGC1            Clock: RCC_APB1ENR (bit 17)
+//   Baud: IBRD=43, FBRD=26         Baud: BRR=0x8B (see below)
+//   TX wait: UART_FR_TXFF          TX wait: USART2_SR bit 7 (TXE)
+//   RX wait: UART_FR_RXFE          RX wait: USART2_SR bit 5 (RXNE)
+//   Data:   UART0_DR_R             Data:   USART2_DR
+//
+// -------------------------------------------------------------------------
+// BAUD RATE CALCULATION:
+//   Clock source: APB1 = HSI = 16 MHz (no PLL)
+//   Target baud:  115200
+//
+//   USARTDIV = f_CK / (16 × baud) = 16,000,000 / (16 × 115,200) = 8.6805...
+//   Mantissa (BRR[15:4]) = 8
+//   Fraction (BRR[3:0])  = round(0.6805 × 16) = round(10.89) = 11
+//   BRR = (8 << 4) | 11 = 0x8B
+//
+//   Actual baud = 16,000,000 / (16 × 8.6875) = 115,108 baud
+//   Error = (115,200 - 115,108) / 115,200 = 0.08%  ✓ (limit: ±2%)
+//
+// -------------------------------------------------------------------------
+// ALTERNATE FUNCTION MAPPING:
+//   PA2: AF7 = USART2_TX   → GPIOA_AFRL bits [11:8]  = 0x7
+//   PA3: AF7 = USART2_RX   → GPIOA_AFRL bits [15:12] = 0x7
+//
+// -------------------------------------------------------------------------
+// HARDWARE PATH:
+//   STM32 PA2(TX) → ST-LINK → USB → PC terminal (115200 baud)
+//   PC terminal → USB → ST-LINK → STM32 PA3(RX)
+//
+// Open any serial terminal at 115200, 8N1:
+//   - PuTTY, TeraTerm, minicom, screen /dev/ttyACM0 115200
+//
+// -------------------------------------------------------------------------
+// REFERENCE MANUALS:
+//   RM0390   — RCC APB1 peripheral clock enable
+//   RM0390   — GPIO alternate function configuration
+//   RM0390   — USART registers and operation
+//   UM1724   — "USART communication" section (ST-LINK VCP pin mapping)
+// -------------------------------------------------------------------------
 #include "uart.h"
-
 #include <stdint.h>
 
 // =========================================================================

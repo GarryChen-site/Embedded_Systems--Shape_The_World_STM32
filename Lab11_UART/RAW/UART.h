@@ -1,3 +1,12 @@
+// uart.h
+// Lab 11 UART — STM32 F446RE Nucleo Port
+//
+// Drop-in replacement for the original TM4C UART.h
+// Same function names and signatures throughout.
+//
+// Hardware: USART2 on PA2(TX) / PA3(RX) → ST-LINK Virtual COM Port
+// Baud: 115200, 8N1
+
 #ifndef UART_H
 #define UART_H
 
