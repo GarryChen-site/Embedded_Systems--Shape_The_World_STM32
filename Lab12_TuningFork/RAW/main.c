@@ -1,3 +1,30 @@
+// main.c — Lab 12 TuningFork, STM32 F446RE Nucleo, bare-metal
+//
+// Original: 440 Hz square wave on PA2, switch on PA3 (TM4C, active HIGH)
+// Ported to: 440 Hz square wave on PA6, B1 button on PC13 (active LOW)
+//
+// Buzzer spec: resonant at 6 kHz, capacitance 15000 pF, 300Ω impedance
+//   ⚠ At 440 Hz the buzzer is OFF resonance — it behaves as a 15000 pF
+//     capacitor with Xc = 1/(2π×440×15000pF) ≈ 24 kΩ.
+//     Current at 440 Hz: I = 3.3V / 24kΩ ≈ 0.14 mA — very quiet but audible.
+//     Add a 1kΩ series resistor as the original lab specifies (limits current
+//     and makes the voltage divider well-defined).
+//
+// Wiring:
+//   PA6 (CN10-13) ──1kΩ── Buzzer+ ── Buzzer− ── GND
+//   PC13 = built-in B1 button (active LOW, external pull-up on board)
+//
+// SysTick timing at 16 MHz HSI:
+//   Output frequency = 440 Hz → ISR fires at 880 Hz (toggles each call)
+//   RELOAD = 16,000,000 / 880 − 1 = 18,181
+//   Actual = 16,000,000 / 18,182 = 879.97 Hz → 439.98 Hz ✓
+//
+// Toggle logic (identical state machine as original):
+//   Press  #1 → forkOn=1 (sound ON)
+//   Release#1 → forkOn stays 1
+//   Press  #2 → forkOn=0 (sound OFF)
+//   Release#2 → forkOn stays 0
+//
 
 #define RCC_AHB1ENR (*((volatile unsigned int *)0x40023830))
 #define GPIOAEN (1U << 0) // GPIOA clock enable
