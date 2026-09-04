@@ -87,6 +87,17 @@ void Sound_Init(void) {
   STK_CTRL = 0x00000007;
 }
 
+// =========================================================================
+// SysTick_Handler
+// Called at 12 kHz. Detects switch edges and toggles buzzer.
+//
+// State machine (mirrors original exactly, active-LOW adapted via SW_PRESSED):
+//   input_sw=0, SW=0: idle
+//   input_sw=0 → SW rises (press #1): forkOn=1, input_sw=1
+//   input_sw=1 → SW falls (release):  input_sw=2
+//   input_sw=2 → SW rises (press #2): forkOn=0, input_sw=3
+//   input_sw=3 → SW falls (release):  input_sw=0
+// =========================================================================
 void SysTick_Handler(void) {
   int sw = SW_PRESSED;
 
