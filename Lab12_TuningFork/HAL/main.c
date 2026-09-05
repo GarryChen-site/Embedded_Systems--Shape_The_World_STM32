@@ -1,4 +1,20 @@
-
+/* =============================================================================
+ * Lab 12 TuningFork — HAL version reference file
+ * Target: STM32F446RE Nucleo
+ *
+ * IOC summary:
+ *   PA5  → GPIO_Output, No pull, Push-Pull, Low speed, Label "LD2"   ← ADD for
+ * visual feedback PA6  → GPIO_Output, No pull, Push-Pull, Low speed, Label
+ * "BUZZER" PC13 → GPIO_Input,  No pull,                       Label "SW_B1"
+ *   TIM2 → Internal Clock, PSC=99, ARR=1022, Global Interrupt ON
+ *   Clock: HSI→PLL, SYSCLK=180 MHz, APB1=/4 (PCLK1=45 MHz), APB2=/2 (PCLK2=90
+ * MHz)
+ *
+ * Wiring (same as bare-metal):
+ *   PA6 (CN10-13) ──220Ω── Buzzer+ ── Buzzer− ── GND
+ *   PC13 = built-in B1 button (active LOW)
+ * =============================================================================
+ */
 
 /* ─── USER CODE BEGIN PV ────────────────────────────────────────────────────
  * Private variables — paste into CubeIDE's USER CODE BEGIN PV region
@@ -47,10 +63,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
   /* ── Drive buzzer on PA6 ── */
   if (forkOn) {
-    HAL_GPIO_TogglePin(BUZZER_GPIO_Port, BUZZER_Pin); /* square wave */
+    HAL_GPIO_TogglePin(BUZZER_GPIO_Port, BUZZER_Pin);   /* square wave */
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); /* LD2 ON  — forkOn=1 */
   } else {
     HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin,
                       GPIO_PIN_RESET); /* silent */
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5,
+                      GPIO_PIN_RESET); /* LD2 OFF — forkOn=0 */
   }
 }
 /* ─── USER CODE END 4 ───────────────────────────────────────────────────────*/
