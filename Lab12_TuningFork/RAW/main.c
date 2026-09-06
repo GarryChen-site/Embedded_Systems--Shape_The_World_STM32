@@ -26,15 +26,17 @@
 //   Release#2 → forkOn stays 0
 //
 
-#define RCC_AHB1ENR (*((volatile unsigned int *)0x40023830))
+#include <stdint.h>
+
+#define RCC_AHB1ENR (*((volatile uint32_t *)0x40023830U))
 #define GPIOAEN (1U << 0) // GPIOA clock enable
 #define GPIOCEN (1U << 2) // GPIOC clock enable
 
 // =========================================================================
 // GPIOA — PA6 = buzzer output (active HIGH)
 // =========================================================================
-#define GPIOA_MODER (*((volatile unsigned int *)0x40020000))
-#define GPIOA_ODR (*((volatile unsigned int *)0x40020014))
+#define GPIOA_MODER (*((volatile uint32_t *)0x40020000))
+#define GPIOA_ODR (*((volatile uint32_t *)0x40020014))
 #define PA6_MODER_MASK (3U << 12)
 #define PA6_MODER_OUT (1U << 12)
 #define PA6_ODR (1U << 6)
@@ -42,8 +44,8 @@
 // =========================================================================
 // GPIOC — PC13 = B1 button (active LOW: 0=pressed, 1=released)
 // =========================================================================
-#define GPIOC_MODER (*((volatile unsigned int *)0x40020800))
-#define GPIOC_IDR (*((volatile unsigned int *)0x40020810))
+#define GPIOC_MODER (*((volatile uint32_t *)0x40020800U))
+#define GPIOC_IDR (*((volatile uint32_t *)0x40020810U))
 #define PC13_MODER_MASK (3U << 26)
 #define PC13_IDR (1U << 13)
 
@@ -52,12 +54,12 @@
 // =========================================================================
 // SysTick timer registers — 24-bit auto-reload timer, clock from AHB
 // =========================================================================
-#define STK_CTRL (*((volatile unsigned int *)0xE000E010))
-#define STK_LOAD (*((volatile unsigned int *)0xE000E014))
-#define STK_VAL (*((volatile unsigned int *)0xE000E018))
+#define STK_CTRL (*((volatile uint32_t *)0xE000E010U))
+#define STK_LOAD (*((volatile uint32_t *)0xE000E014U))
+#define STK_VAL (*((volatile uint32_t *)0xE000E018U))
 
 // SysTick priority register
-#define SCB_SHPR3 (*((volatile unsigned int *)0xE000ED20))
+#define SCB_SHPR3 (*((volatile uint32_t *)0xE000ED20U))
 
 // each half-period requires one ISR call
 // ISR frequency = 2 * output frequency = 880 Hz
@@ -65,26 +67,35 @@
 // RELOAD = (16MHz / 880Hz) - 1 = 18181
 #define RELOAD_440HZ 18181U // 16MHz/18182 = 880Hz ISR → 440Hz output
 
-volatile unsigned int forkOn;
-volatile unsigned int input_sw;
+volatile uint32_t forkOn;
+volatile uint32_t input_sw;
 
 void Sound_Init(void) {
-  RCC_AHB1ENR |= GPIOAEN | GPIOCEN;
-  volatile unsigned int dummy = RCC_AHB1ENR;
+  // 1. Enable GPIO clocks
+  RCC_AHB1ENR |= (GPIOAEN | GPIOCEN);
+  volatile uint32_t dummy = RCC_AHB1ENR;
   (void)dummy;
 
+  // 2. PA6 → output (buzzer)
   GPIOA_MODER &= ~PA6_MODER_MASK;
   GPIOA_MODER |= PA6_MODER_OUT;
-  GPIOA_ODR &= ~PA6_ODR;
+  GPIOA_ODR &= ~PA6_ODR; // start silent
 
-  GPIOC_MODER &= ~PC13_MODER_MASK;
+  // 2b. PA5 → output (LD2 green LED — visual mirror of forkOn)
+  GPIOA_MODER &= ~(3U << 10); // clear MODER bits [11:10]
+  GPIOA_MODER |= (1U << 10);  // 01 = output
+  GPIOA_ODR &= ~(1U << 5);    // start OFF
 
-  STK_CTRL = 0;
-  STK_LOAD = RELOAD_440HZ;
-  STK_VAL = 0;
-  SCB_SHPR3 &= 0x00FFFFFF;
+  // 3. PC13 → input (B1 button; no PUPDR change — external pull-up on board)
+  GPIOC_MODER &= ~PC13_MODER_MASK; // 00 = input
 
-  STK_CTRL = 0x00000007;
+  // 4. SysTick interrupt at 12 kHz → 6 kHz square wave
+  STK_CTRL = 0;             // disable during setup
+  STK_LOAD = RELOAD_440HZ;  // 880 Hz ISR → 440 Hz square wave
+  STK_VAL = 0;              // clear current
+  SCB_SHPR3 &= 0x00FFFFFFU; // SysTick priority = 0 (highest)
+                            // original: NVIC_SYS_PRI3_R & 0x00FFFFFF
+  STK_CTRL = 0x00000007U;   // ENABLE | TICKINT | CLKSOURCE(AHB)
 }
 
 // =========================================================================
@@ -123,10 +134,15 @@ void SysTick_Handler(void) {
 }
 
 int main(void) {
-
   forkOn = 0;
   input_sw = 0;
   Sound_Init();
   while (1) {
+    // Mirror forkOn → LD2 (PA5) for visual feedback during physical testing
+    if (forkOn) {
+      GPIOA_ODR |= (1U << 5);
+    } else {
+      GPIOA_ODR &= ~(1U << 5);
+    }
   }
 }
