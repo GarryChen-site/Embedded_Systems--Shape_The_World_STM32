@@ -6,8 +6,9 @@ int main(void) {
 
   uint8_t key;
 
-  Sound_Init();
-  Piano_Init();
+  Sound_Init(); // initialize SysTick + DAC (calls DAC_Init internally)
+  Piano_Init(); // initialize 4 key inputs
+  // SysTick interrupts are already enabled inside Sound_Init (STK_CTRL = 0x07)
 
   while (1) {
 
@@ -16,6 +17,7 @@ int main(void) {
     switch (key) {
     case SILENCE:
       Sound_Off();
+      break;
     case DO:
       Sound_Tone(DO_PERIOD);
       break;
