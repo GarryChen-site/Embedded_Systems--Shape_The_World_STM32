@@ -1,0 +1,286 @@
+/* =============================================================================
+ * Lab 13 DAC — HAL version, STM32F446RE Nucleo
+ * =============================================================================
+ *
+ * HOW TO USE THIS FILE
+ * ────────────────────
+ * This is a reference copy. In STM32CubeIDE:
+ *   1. Create a new NUCLEO-F446RE STM32Cube project.
+ *   2. Configure the IOC (see HAL_guide.md for full steps).
+ *   3. Generate code (Alt+G).
+ *   4. Copy each marked block into the matching USER CODE region.
+ *
+ * HARDWARE OVERVIEW
+ * ─────────────────
+ * 4-bit R-2R DAC  → PB0(LSB), PB4, PB5, PB6(MSB)  [GPIO Output]
+ *                   (PB3 is reserved SYS_JTDO-SWO on Nucleo-F446RE)
+ * Piano key DO    → PC6   active HIGH, 10kΩ pull-down
+ * Piano key RE    → PC8   active HIGH, 10kΩ pull-down
+ * Piano key MI    → PC9   active HIGH, 10kΩ pull-down
+ * Piano key SOL   → PC10  active HIGH, 10kΩ pull-down
+ *
+ * Buzzer wired after DAC output (R-2R Thevenin output → Buzzer+ → GND).
+ *
+ * IOC summary (details in HAL_guide.md):
+ *   PB0,PB4,PB5,PB6 → GPIO_Output, No pull, Push-Pull, Label DAC0–DAC3
+ *   (PB0 = Arduino A3 = CN8 pin A3;  PB3 left as SYS_JTDO-SWO)
+ *   PC6,PC8,PC9,PC10 → GPIO_Input, No pull (external pull-down), Labels
+ * KEY_C/D/E/G TIM2  → Internal Clock, PSC=99, ARR=1022 (idle tick), Global
+ * Interrupt ON TIM3  → Internal Clock, PSC=99, ARR varies per note, Global
+ * Interrupt ON Clock → HSI, PLLM=8, PLLN=180, PLLP=2 → 180 MHz APB1=/4
+ * (PCLK1=45 MHz), APB2=/2 (PCLK2=90 MHz)
+ *
+ * DESIGN: TIM2 fires at a variable rate (set by Sound_Tone_HAL).
+ *         Each interrupt steps the 32-point sine table and writes to DAC.
+ *         The main loop only reads keys and calls Sound_Tone_HAL /
+ * Sound_Off_HAL.
+ * =============================================================================
+ */
+
+/* ── USER CODE BEGIN Includes ────────────────────────────────────────────── */
+/* nothing extra needed */
+/* ── USER CODE END Includes ──────────────────────────────────────────────── */
+
+/* ── USER CODE BEGIN PD (Private defines) ────────────────────────────────── */
+/* Note identifiers */
+#define SILENCE 0x00
+#define DO 0x01  /* C4 @ 523.251 Hz */
+#define RE 0x02  /* D4 @ 587.330 Hz */
+#define MI 0x04  /* E4 @ 659.255 Hz */
+#define SOL 0x08 /* G4 @ 783.991 Hz */
+
+/*
+ * TIM2 ARR values for each note
+ * Formula: ARR = TIM2_CLK / (PSC+1) / (32 × note_Hz) − 1
+ *          TIM2_CLK = 90 MHz  (2 × PCLK1, PCLK1=45 MHz, APB1=/4)
+ *          PSC = 99  →  tick clock = 90e6/100 = 900 kHz
+ *
+ *  Note   Target Hz   ARR = 900000/(32×f)−1   Actual Hz     Error
+ *  C4     523.251      53.76 → 53              524.71 Hz     +1.4 Hz
+ *  D4     587.330      47.85 → 47              586.96 Hz     −0.4 Hz
+ *  E4     659.255      42.62 → 42              659.34 Hz     +0.1 Hz
+ *  G4     783.991      35.82 → 35              781.25 Hz     −2.8 Hz
+ *
+ * Accuracy is sufficient for audible piano keys.
+ * Fine-tune by adjusting ARR ±1 if needed.
+ */
+#define ARR_DO 53U  /* C4 */
+#define ARR_RE 47U  /* D4 */
+#define ARR_MI 42U  /* E4 */
+#define ARR_SOL 35U /* G4 */
+
+/* DAC GPIO: PB0(LSB=D0), PB4(D1), PB5(D2), PB6(MSB=D3)
+ * PB3 is SYS_JTDO-SWO on Nucleo-F446RE → use PB0 (Arduino A3) for D0 */
+#define DAC_MASK (GPIO_PIN_0 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6)
+
+/* Piano key GPIO (active HIGH, external 10kΩ pull-down) */
+#define KEY_C_PIN GPIO_PIN_6  /* PC6  */
+#define KEY_D_PIN GPIO_PIN_8  /* PC8  */
+#define KEY_E_PIN GPIO_PIN_9  /* PC9  */
+#define KEY_G_PIN GPIO_PIN_10 /* PC10 */
+/* ── USER CODE END PD ────────────────────────────────────────────────────── */
+
+/* ── USER CODE BEGIN PV (Private variables) ──────────────────────────────── */
+/* 32-point sine wave, 4-bit amplitude (0–15) — identical to bare-metal */
+static const uint8_t sin_wave32[32] = {
+    8, 9, 11, 12, 13, 14, 14, 15, 15, 15, 14, 14, 13, 12, 11, 9,
+    8, 7, 5,  4,  3,  2,  2,  1,  1,  1,  2,  2,  3,  4,  5,  7};
+
+volatile uint32_t soundOff = 1; /* 1 = silent, 0 = playing             */
+volatile uint32_t stateDAC = 0; /* current index into sin_wave32 (0–31) */
+/* ── USER CODE END PV ────────────────────────────────────────────────────── */
+
+/* ── USER CODE BEGIN 0 (helper functions, before main) ───────────────────── */
+
+/* DAC_Out_HAL: write 4-bit sine value to DAC GPIO pins
+ * bit0 (LSB) → PB0   bit1 → PB4   bit2 → PB5   bit3 (MSB) → PB6
+ * Pins are non-consecutive, so each bit is mapped individually. */
+static void DAC_Out_HAL(uint8_t data) {
+  uint32_t odr = GPIOB->ODR & ~DAC_MASK; /* clear all 4 DAC pins */
+  if (data & 0x01U)
+    odr |= GPIO_PIN_0; /* bit0 (LSB) → PB0     */
+  if (data & 0x02U)
+    odr |= GPIO_PIN_4; /* bit1       → PB4     */
+  if (data & 0x04U)
+    odr |= GPIO_PIN_5; /* bit2       → PB5     */
+  if (data & 0x08U)
+    odr |= GPIO_PIN_6; /* bit3 (MSB) → PB6     */
+  GPIOB->ODR = odr;
+}
+
+/* Sound_Tone_HAL: set TIM2 reload to play a note
+ * htim2 is the handle generated by CubeIDE */
+static void Sound_Tone_HAL(TIM_HandleTypeDef *htim2, uint32_t arr) {
+  HAL_TIM_Base_Stop_IT(htim2);
+  soundOff = 0;
+  stateDAC = 0;
+  __HAL_TIM_SET_AUTORELOAD(htim2, arr);
+  __HAL_TIM_SET_COUNTER(htim2, 0);
+  HAL_TIM_Base_Start_IT(htim2);
+}
+
+/* Sound_Off_HAL: silence the DAC */
+static void Sound_Off_HAL(TIM_HandleTypeDef *htim2) {
+  soundOff = 1;
+  DAC_Out_HAL(0);
+  /* leave timer running at last ARR — ISR will output 0 while soundOff=1 */
+  (void)htim2;
+}
+
+/* Piano_In_HAL: read 4 keys, return note identifier
+ * Priority: G > E > D > C (same as bare-metal) */
+static uint8_t Piano_In_HAL(void) {
+  if (HAL_GPIO_ReadPin(GPIOC, KEY_G_PIN) == GPIO_PIN_SET)
+    return SOL;
+  if (HAL_GPIO_ReadPin(GPIOC, KEY_E_PIN) == GPIO_PIN_SET)
+    return MI;
+  if (HAL_GPIO_ReadPin(GPIOC, KEY_D_PIN) == GPIO_PIN_SET)
+    return RE;
+  if (HAL_GPIO_ReadPin(GPIOC, KEY_C_PIN) == GPIO_PIN_SET)
+    return DO;
+  return SILENCE;
+}
+
+/* uart_note_print: send note + ideal vs actual Hz to USART2 virtual COM
+ * (115200 baud, no extra wiring — goes through Nucleo ST-Link USB)
+ *
+ * Actual Hz = 900000 / (ARR+1) / 32
+ *   DO  ARR=53: 520.83 Hz  (ideal 523.25, err -2.42 Hz)
+ *   RE  ARR=47: 585.94 Hz  (ideal 587.33, err -1.39 Hz)
+ *   MI  ARR=42: 654.07 Hz  (ideal 659.26, err -5.19 Hz)
+ *   SOL ARR=35: 781.25 Hz  (ideal 783.99, err -2.74 Hz) */
+static void uart_note_print(uint8_t key) {
+  const char *msg;
+  switch (key) {
+  case DO:
+    msg = "[DO ] ideal=523.25 Hz  actual=520.83 Hz  err= -2.42 Hz\r\n";
+    break;
+  case RE:
+    msg = "[RE ] ideal=587.33 Hz  actual=585.94 Hz  err= -1.39 Hz\r\n";
+    break;
+  case MI:
+    msg = "[MI ] ideal=659.26 Hz  actual=654.07 Hz  err= -5.19 Hz\r\n";
+    break;
+  case SOL:
+    msg = "[SOL] ideal=783.99 Hz  actual=781.25 Hz  err= -2.74 Hz\r\n";
+    break;
+  default:
+    msg = "[---] silent\r\n";
+    break;
+  }
+  for (const char *p = msg; *p; p++)
+    HAL_UART_Transmit(&huart2, (const uint8_t *)p, 1, 10);
+}
+/* ── USER CODE END 0
+ * ─────────────────────────────────────────────────────────────── */
+
+/* ── USER CODE BEGIN 2 (inside main, after MX_TIM2_Init) ────────────────── */
+/* Start TIM2. Tone frequency is set by Sound_Tone_HAL() in the main loop. */
+HAL_TIM_Base_Start_IT(&htim2);
+
+/* Startup banner + frequency table on virtual COM port (115200 baud) */
+const char *banner = "\r\n=== Lab 13 DAC Piano (STM32F446RE) ===\r\n"
+                     "TIM2: CLK=90MHz  PSC=99  tick=900kHz  32 sine samples\r\n"
+                     "Actual Hz = 900000 / (ARR+1) / 32\r\n"
+                     "\r\n"
+                     "  Key   Ideal Hz   ARR   Actual Hz   Error\r\n"
+                     "  DO    523.25     53    520.83      -2.42 Hz\r\n"
+                     "  RE    587.33     47    585.94      -1.39 Hz\r\n"
+                     "  MI    659.26     42    654.07      -5.19 Hz\r\n"
+                     "  SOL   783.99     35    781.25      -2.74 Hz\r\n"
+                     "\r\n"
+                     "Press a piano key:\r\n"
+                     "-------------------------------------------\r\n";
+for (const char *p = banner; *p; p++)
+  HAL_UART_Transmit(&huart2, (const uint8_t *)p, 1, 10);
+/* ── USER CODE END 2
+ * ─────────────────────────────────────────────────────────────────── */
+
+/* ── USER CODE BEGIN WHILE (main loop body) ──────────────────────────────── */
+/*
+ * KEY CHANGE DETECTION — only call Sound_Tone_HAL when key state changes.
+ *
+ * WHY: Sound_Tone_HAL stops and restarts TIM2 (resets counter).
+ * Calling it every loop iteration at ~MHz rates resets TIM2 faster than
+ * its overflow period (~60 µs for DO), so the ISR never fires → no sound.
+ * Tracking last_key and acting only on change fixes this.
+ */
+uint8_t last_key = 0xFF; /* impossible value — forces first update */
+
+/* inside while(1): */
+uint8_t key = Piano_In_HAL();
+if (key != last_key) {
+  last_key = key;
+  switch (key) {
+  case DO:
+    Sound_Tone_HAL(&htim2, ARR_DO);
+    break;
+  case RE:
+    Sound_Tone_HAL(&htim2, ARR_RE);
+    break;
+  case MI:
+    Sound_Tone_HAL(&htim2, ARR_MI);
+    break;
+  case SOL:
+    Sound_Tone_HAL(&htim2, ARR_SOL);
+    break;
+  default:
+    Sound_Off_HAL(&htim2);
+    break;
+  }
+  uart_note_print(key); /* print note + Hz to serial terminal */
+  /* LD2 ON while key held, OFF when released */
+  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin,
+                    (key != SILENCE) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
+/* ── USER CODE END WHILE
+ * ─────────────────────────────────────────────────────────────── */
+
+/* ── USER CODE BEGIN 4 (after main, global scope) ────────────────────────── */
+/*
+ * HAL_TIM_PeriodElapsedCallback — fires at (TIM2_CLK / (PSC+1) / (ARR+1)) Hz
+ *
+ * Each call advances the 32-point sine table index and writes to the DAC.
+ * Frequency of DAC output = TIM2 ISR rate / 32.
+ *
+ * This replaces SysTick_Handler from the bare-metal sound.c.
+ */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+  if (htim->Instance != TIM2)
+    return; /* guard: ignore other timer callbacks */
+
+  if (soundOff) {
+    DAC_Out_HAL(0); /* silence: output 0 V */
+  } else {
+    stateDAC = (stateDAC + 1) & 0x1FU; /* advance, wrap at 32 */
+    DAC_Out_HAL(sin_wave32[stateDAC]); /* write to R-2R DAC   */
+  }
+}
+/* ── USER CODE END 4 ─────────────────────────────────────────────────────── */
+
+/* =============================================================================
+ * TIMING REFERENCE
+ * ─────────────────
+ * Clock tree (error-free):
+ *   HSI 16 MHz → PLLM/8 → VCO×180 → PLLP/2 → SYSCLK = 180 MHz
+ *   APB1 /4  → PCLK1 = 45 MHz  (max 45 MHz ✓)
+ *   APB2 /2  → PCLK2 = 90 MHz  (max 90 MHz ✓)
+ *   TIM2_CLK = 2 × PCLK1 = 90 MHz  (×2 because APB1 PSC ≠ 1)
+ *
+ * TIM2 with PSC=99:
+ *   tick clock = 90e6 / 100 = 900 kHz
+ *   ISR rate   = 900 kHz / (ARR+1)
+ *   Note freq  = ISR rate / 32 samples
+ *
+ *  Note  ARR   ISR rate      Note freq   Target
+ *  DO    53    900k/54=16.67kHz  520.8Hz  523.3Hz
+ *  RE    47    900k/48=18.75kHz  585.9Hz  587.3Hz
+ *  MI    42    900k/43=20.93kHz  654.1Hz  659.3Hz
+ *  SOL   35    900k/36=25.00kHz  781.3Hz  784.0Hz
+ *
+ * IOC TIM2 Parameter Settings (starting/idle values):
+ *   Prescaler (PSC)      = 99
+ *   Counter Period (ARR) = 1022   ← press Enter after typing!
+ *   NVIC: TIM2 global interrupt  ☑ enabled
+ * =============================================================================
+ */
