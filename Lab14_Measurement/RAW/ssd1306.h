@@ -49,6 +49,13 @@ void SSD1306_DrawString(uint8_t col, uint8_t page, const char *s);
 // SSD1306_DrawHLine — draw a horizontal rule across the full width at
 // 'page' (a thin 1-pixel line at row 0 of that page).
 // Does NOT update the display.
+// =========================================================================
+void SSD1306_DrawHLine(uint8_t page);
+
+// =========================================================================
+// SSD1306_DrawHLine — draw a horizontal rule across the full width at
+// 'page' (a thin 1-pixel line at row 0 of that page).
+// Does NOT update the display.
 // =========================================================================void SSD1306_DrawHLine(uint8_t page);
 void SSD1306_DrawBar(uint8_t page, uint8_t percent);
 
