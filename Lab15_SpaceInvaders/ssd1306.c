@@ -1,11 +1,62 @@
-
+// ssd1306.c — SSD1306 OLED 128×64 driver via I2C1, Lab 15 STM32 port
+//
+// Replaces Nokia5110.c entirely.  Provides the same API surface so
+// SpaceInvaders_stm32.c needs only minimal changes (swap function names).
+//
+// =========================================================================
+// HARDWARE WIRING
+// =========================================================================
+//   PB6 (SCL)  CN6 pin 7
+//   PB7 (SDA)  CN6 pin 11
+//   3.3V        CN8 pin 4
+//   GND         SSD1306 GND
+//
+// Use external 4.7kΩ pull-up resistors on SCL and SDA lines
+// (or enable internal pull-ups: configured below in GPIO init).
+//
+// =========================================================================
+// DISPLAY BUFFER FORMAT  (same page/column layout as Nokia5110)
+// =========================================================================
+//   ScreenBuffer[page * 128 + col]
+//     page = screen_row / 8      (0=top … 7=bottom)
+//     bit  = screen_row % 8      (bit 0 = topmost row in page)
+//   1 = white pixel, 0 = black pixel
+//
+// =========================================================================
+// BMP SPRITE DECODING  (4-bit indexed LM3S BMP format)
+// =========================================================================
+//   Header byte layout (identical to Nokia5110_PrintBMP):
+//     ptr[18] = width  (pixels)
+//     ptr[22] = height (pixels)
+//     ptr[118..] = pixel data, bottom-to-top, 2 pixels/byte (high nibble first)
+//     Row stride = ceil(width/2) bytes, padded to 4-byte boundary
+//
+//   Pixel with 4-bit color > threshold → set to white (1) in buffer
+//   Pixel with 4-bit color ≤ threshold → leave as-is  (ClearBuffer handles 0)
+//
+// =========================================================================
+// I2C COMMUNICATION
+// =========================================================================
+//   I2C1, 400 kHz Fast Mode, polling (no DMA/IRQ)
+//   PB6/PB7 → AF4, open-drain, internal pull-up
+//
+//   SSD1306 command write:  START + (0x3C<<1|0) + 0x00 + cmd_byte + STOP
+//   SSD1306 data stream:    START + (0x3C<<1|0) + 0x40 + byte0 + … + byteN +
+//   STOP
+//
 #include "ssd1306.h"
 
 #include <stdint.h>
 
+// =========================================================================
+// RCC
+// =========================================================================
 #define RCC_AHB1ENR (*((volatile uint32_t *)0x40023830U))
 #define RCC_APB1ENR (*((volatile uint32_t *)0x40023840U))
 
+// =========================================================================
+// GPIOB (PB6 = I2C1_SCL, PB7 = I2C1_SDA)
+// =========================================================================
 #define GPIOB_MODER (*((volatile uint32_t *)0x40020400U))
 #define GPIOB_OTYPER (*((volatile uint32_t *)0x40020404U))
 #define GPIOB_OSPEEDR (*((volatile uint32_t *)0x40020408U))
@@ -187,6 +238,8 @@ static void i2c1_stop(void) {
 // SSD1306 command helpers
 // ==================================================
 
+// Send a stream of command bytes in one I2C transaction
+// Control byte 0x00: Co=0 (multiple commands), D/C#=0 (command)
 static void ssd1306_cmd_stream(const uint8_t *cmds, uint32_t n) {
   i2c1_start();
   i2c1_addr(SSD1306_I2C_ADDR);
@@ -207,16 +260,16 @@ void SSD1306_Init(void) {
   RCC_AHB1ENR |= (1U << 1);
   RCC_APB1ENR |= (1U << 21);
 
-  // 2. Configure PB8 (SCL) and PB9 (SDA)
+  // 2. Configure PB6 (SCL) and PB7 (SDA)
   //    AF mode (MODER=10), open-drain (OTYPER=1), high-speed (OSPEEDR=11)
   //    Pull-up (PUPDR=01), AF4 (AFRH)
-  GPIOB_MODER &= ~((3U << 16) | (3U << 18)); // clear PB8/PB9
+  GPIOB_MODER &= ~((3U << 16) | (3U << 18)); // clear PB6/PB7
   GPIOB_MODER |= ((2U << 16) | (2U << 18));  // AF mode
   GPIOB_OTYPER |= (1U << 8) | (1U << 9);     // open-drain
   GPIOB_OSPEEDR |= (3U << 16) | (3U << 18);  // high speed
   GPIOB_PUPDR &= ~((3U << 16) | (3U << 18));
   GPIOB_PUPDR |= (1U << 16) | (1U << 18); // pull-up
-  GPIOB_AFRH &= ~(0xFFU);                 // clear AF for PB8+PB9
+  GPIOB_AFRH &= ~(0xFFU);                 // clear AF for PB6/PB7
   GPIOB_AFRH |= (4U << 0) | (4U << 4);    // AF4 = I2C1
 
   // 3. Reset I2C1
@@ -293,6 +346,19 @@ void SSD1306_DisplayBuffer(void) {
   i2c1_stop();
 }
 
+// =========================================================================
+// SSD1306_PrintBMP — decode a 4-bit LM3S BMP into the frame buffer
+//
+// ALGORITHM:
+//   BMP rows are stored bottom-to-top, 2 pixels/byte (high nibble = left).
+//   ypos is the BOTTOM row of the sprite on screen.
+//   For each BMP row r (0=bottom, height-1=top):
+//     screen_y = ypos - r
+//     page = screen_y / 8,  bit = screen_y % 8
+//     For each column c:
+//       extract 4-bit color from nibble
+//       if color > threshold: set bit in ScreenBuffer[page*128 + xpos+c]
+// =========================================================================
 void SSD1306_PrintBMP(uint8_t xpos, uint8_t ypos, const uint8_t *ptr,
                       uint8_t threshold) {
   uint8_t width = ptr[18];  // BMP width
