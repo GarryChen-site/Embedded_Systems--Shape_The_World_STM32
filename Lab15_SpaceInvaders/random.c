@@ -1,4 +1,8 @@
-
+// random.c — Lab 15 STM32 port
+//
+// Replaces the TM4C assembly LFSR (random.s).
+// Uses XorShift32 — period 2^32-1, same statistical quality.
+// API is identical: Random_Init(seed) + Random32().
 #include "random.h"
 
 static uint32_t xstate = 1U;

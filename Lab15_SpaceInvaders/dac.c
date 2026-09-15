@@ -1,4 +1,34 @@
-
+// dac.c — Lab 13 DAC, STM32 F446RE port
+//
+// Original: 4-bit DAC on PB0–PB3 (TM4C Port B)
+// Ported to: 4-bit DAC on PB3–PB6 (STM32 GPIOB bits [6:3])
+//
+// R-2R RESISTOR LADDER (4-bit, R=10kΩ, 2R=20kΩ):
+//
+//   PB3(bit0,LSB)─[20k]─┐
+//                        ├─[10k]─┐
+//   PB4(bit1)    ─[20k]─┘        │
+//                        [20k]   ├─[10k]─┐
+//                         │      │        │
+//   PB5(bit2)    ─[20k]─┐ GND   │        ├─[10k]─┐
+//                        ├─[10k]─┘        │        │
+//   PB6(bit3,MSB)─[20k]─┘        [20k]   │        ├─ VOUT ── Buzzer+ ── Buzzer-
+//   ── GND
+//                                  │      GND      │
+//                                  GND           [20k]
+//                                                  │
+//                                                 GND
+//
+// Output range: 0 V to 3.3 × 15/16 = 3.09 V
+// Resolution:   3.3 / 16 = 0.206 V per step
+// Source impedance: ~R = 10 kΩ (Thevenin from R-2R)
+//
+// Pin locations :
+//   PB3  CN9 pin 3  (D3)
+//   PB4  CN9 pin 5  (D5)
+//   PB5  CN9 pin 4  (D4)
+//   PB6  CN9 pin 9  (D10)
+//
 
 #include "dac.h"
 #include <stdint.h>
@@ -7,6 +37,7 @@
 #define GPIOB_MODER (*((volatile uint32_t *)0x40020400U))
 #define GPIOB_ODR (*((volatile uint32_t *)0x40020414U))
 
+// DAC uses GPIOB bits [6:3] = PB3(bit0) PB4(bit1) PB5(bit2) PB6(bit3)
 #define DAC_MASK (0xFU << 3) // bits 6,5,4,3
 
 void DAC_Init(void) {
