@@ -1,3 +1,60 @@
+// SpaceInvaders_stm32.c — Lab 15 Space Invaders, STM32 F446RE port
+//
+// Original: TM4C123 @ 80 MHz, Nokia 5110 (84×48), slide pot PE2/AIN1,
+//           fire buttons PE0/PE1, R-2R DAC PB0-PB3, TExaS grader
+//
+// Ported to: STM32 F446RE @ 16 MHz HSI, SSD1306 OLED 128×64 (I2C1 PB6/PB7),
+//            square trimming pot PA0/ADC1, fire buttons PC6/PC8 (EXTI9_5),
+//            R-2R DAC PB3-PB6 (Lab13 pattern), no TExaS grader
+//
+// =========================================================================
+// HARDWARE WIRING
+// =========================================================================
+//
+//  DISPLAY (SSD1306 I2C OLED 128×64):
+//    PB6 (SCL)  CN9 pin 10  ←→  SSD1306 SCL
+//    PB7 (SDA)  CN9 pin 3   ←→  SSD1306 SDA
+//    3.3V        CN8 pin 4   →   SSD1306 VCC
+//    GND                     →   SSD1306 GND
+//    (Add 4.7kΩ pull-ups on SCL and SDA to 3.3V)
+//
+//  TRIMMING POTENTIOMETER (player ship position):
+//    PA0  (CN8 pin 1 "A0")  ←  wiper
+//    GND                    ←  CCW end (pin 1)
+//    3.3V (CN8 pin 4)       ←  CW  end (pin 3)
+//    Electrical range: 0°–240° → ADC 0–4095 → player X 0–110
+//
+//  FIRE BUTTONS (normally-open, with external pull-down to GND):
+//    PC6  (CN10 pin 13)  ← missile button  (press = 3.3V high → EXTI6 rise)
+//    PC8  (CN10 pin 3)   ← laser  button   (press = 3.3V high → EXTI8 rise)
+//
+//  SOUND DAC (R-2R ladder → buzzer optional):
+//    PB3  (CN10 pin 31)  ← bit 0 (LSB, 8R)
+//    PB4  (CN10 pin 27)  ← bit 1 (4R)
+//    PB5  (CN10 pin 29)  ← bit 2 (2R)
+//    PB6  (CN10 pin 17)  ← bit 3 (MSB, R)
+//
+// =========================================================================
+// ARCHITECTURE DIFFERENCES FROM ORIGINAL
+// =========================================================================
+//
+//  Screen       Nokia 5110 84×48        SSD1306 OLED 128×64
+//  Display API  Nokia5110_*             SSD1306_*  (identical call pattern)
+//  Pot          Slide, PE2/AIN1         Trimmer, PA0/ADC1_IN0
+//  Buttons      PE0/PE1 GPIO-IRQ        PC6/PC8 EXTI9_5
+//  Sound        PCM 110 KB Sound.c      Sine-wave tones, sound_stm32.c
+//  PRNG         random.s (TM4C LFSR)   random.c (XorShift32)
+//  Clock        80 MHz (PLL via TExaS) 16 MHz (HSI default)
+//  SysTick      RELOAD=2666 (~30kHz)   RELOAD=533332 (30 Hz)
+//  Convert()    (66×sample)/4095       (110×sample)/4095
+//  Player.y     47                      63
+//  Boundary X   82                      126
+//  Boundary Y   48                      64
+//
+// =========================================================================
+// References:
+//   RM0390 §11 (ADC), §8.4 (GPIO), §10 (EXTI/SYSCFG), §4 (SysTick)
+//   PM0214 §4.4 (SysTick programmer's model)
 #include "random.h"
 #include "sound_stm32.h"
 #include "ssd1306.h"
@@ -46,6 +103,11 @@
 #define STK_CTRL (*((volatile uint32_t *)0xE000E010U))
 #define STK_LOAD (*((volatile uint32_t *)0xE000E014U))
 #define STK_VAL (*((volatile uint32_t *)0xE000E018U))
+
+// =========================================================================
+// Screen geometry (replaces Nokia5110 84×48)
+// =========================================================================
+// SCREENW = 128 and SCREENH = 64 come from ssd1306.h
 
 // =========================================================================
 // Game global variables
@@ -565,7 +627,7 @@ static uint32_t Convert(uint32_t sample) { return (110U * sample) / 4095U; }
 #define PLAYERW ((uint8_t)PlayerShip0[18])
 #define PLAYERH ((uint8_t)PlayerShip0[22])
 // =========================================================================
-// Game object initializers
+// Game object state
 // =========================================================================
 typedef struct {
   uint32_t x;
@@ -583,6 +645,9 @@ STyp Missile[9]; // [0-7] = enemy missiles, [8] = player missile
 STyp Laser[9];   // [0-7] = enemy lasers, [8] = player laser
 STyp UFO;
 
+// =========================================================================
+// Game object initializers
+// =========================================================================
 void UFO_Init(void) {
   UFO.x = 0;
   UFO.y = 10;
