@@ -1,7 +1,7 @@
 // i2c.c — Lab 14 ADC, STM32 F446RE
 //
 // Bare-metal I2C1 driver: polling, fast mode (400 kHz), master-transmit only.
-// Uses PB8 (SCL) and PB9 (SDA) in open-drain AF4 mode.
+// Uses PB6 (SCL) and PB7 (SDA) in open-drain AF4 mode.
 //
 // CLOCK DERIVATION (PCLK1 = 16 MHz, HSI, no PLL):
 //   Fast mode (Fscl ≤ 400 kHz), DUTY=0 → Tlow = 2×Thigh
@@ -13,7 +13,7 @@
 // REGISTER MAP:
 //   I2C1 base 0x40005400
 //   RCC APB1ENR bit 21 = I2C1EN
-//   GPIOB AFRH: PB8=bits[3:0]=4, PB9=bits[7:4]=4  (AF4 = I2C1)
+//   GPIOB AFRL: PB6=bits[27:24]=4, PB7=bits[31:28]=4  (AF4 = I2C1)
 //
 
 #include "i2c.h"
@@ -32,8 +32,7 @@
 #define GPIOB_OTYPER (*((volatile uint32_t *)0x40020404U))
 #define GPIOB_OSPEEDR (*((volatile uint32_t *)0x40020408U))
 #define GPIOB_PUPDR (*((volatile uint32_t *)0x4002040CU))
-#define GPIOB_AFRH (*((volatile uint32_t *)0x40020424U)) // AF for PB8–PB15
-
+#define GPIOB_AFRL (*((volatile uint32_t *)0x40020420U)) // AF for PB0–PB7
 // =========================================================================
 // I2C1 registers
 // =========================================================================
@@ -87,23 +86,24 @@ void I2C1_Init(void) {
   volatile uint32_t dummy = RCC_APB1ENR;
   (void)dummy; // clock settle
 
-  // 2. Configure PB8 (SCL) and PB9 (SDA)
-  //    MODER = 10 (Alternate Function) — bits [17:16] for PB8, [19:18] for PB9
-  GPIOB_MODER &= ~((3U << 16) | (3U << 18));
-  GPIOB_MODER |= ((2U << 16) | (2U << 18));
+  // 2. Configure PB6 (SCL) and PB7 (SDA)
+  //    MODER = 10 (Alternate Function) — bits [13:12] for PB6, [15:14] for PB7
+  GPIOB_MODER &= ~((3U << 12) | (3U << 14));
+  GPIOB_MODER |= ((2U << 12) | (2U << 14));
 
-  //    OTYPER = 1 (open-drain) — bit 8 for PB8, bit 9 for PB9
-  GPIOB_OTYPER |= (1U << 8) | (1U << 9);
+  //    OTYPER = 1 (open-drain) — bit 6 for PB6, bit 7 for PB7
+  GPIOB_OTYPER |= (1U << 6) | (1U << 7);
 
-  //    OSPEEDR = 11 (very high speed) — bits [17:16], [19:18]
-  GPIOB_OSPEEDR |= (3U << 16) | (3U << 18);
+  //    OSPEEDR = 11 (very high speed) — bits [13:12], [15:14]
+  GPIOB_OSPEEDR |= (3U << 12) | (3U << 14);
 
   //    PUPDR = 00 (no pull) — module has on-board pull-ups
-  GPIOB_PUPDR &= ~((3U << 16) | (3U << 18));
+  GPIOB_PUPDR &= ~((3U << 12) | (3U << 14));
 
-  //    AFRH: AF4 for PB8 (bits [3:0]) and PB9 (bits [7:4])
-  GPIOB_AFRH &= ~((0xFU << 0) | (0xFU << 4));
-  GPIOB_AFRH |= ((4U << 0) | (4U << 4));
+  //    AFRL: AF4 for PB6 (bits [27:24]) and PB7 (bits [31:28])  (RM0390 Table
+  //    11) Note: PB6/PB7 use AFRL (low AF register), not AFRH
+  GPIOB_AFRL &= ~((0xFU << 24) | (0xFU << 28));
+  GPIOB_AFRL |= ((4U << 24) | (4U << 28));
 
   // 3. Configure I2C1
   I2C1_CR1 = 0; // disable PE while configuring

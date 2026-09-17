@@ -1,13 +1,13 @@
 // i2c.h — Lab 14 ADC, STM32 F446RE
 //
 // Bare-metal I2C1 driver (polling, no DMA, no interrupts).
-// Target: 400 kHz fast mode on PB8 (SCL) / PB9 (SDA) — Arduino D15/D14.
+// Target: 400 kHz fast mode on PB6 (SCL) / PB7 (SDA) — default CubeIDE pins.
 //
 // HARDWARE CONNECTIONS (SSD1306 0.96" OLED):
 //   OLED GND  →  Nucleo GND
 //   OLED VCC  →  Nucleo 3.3V  (CN6 pin 4)
-//   OLED SCL  →  PB8  (CN10 pin 3 / Arduino D15)
-//   OLED SDA  →  PB9  (CN10 pin 5 / Arduino D14)
+//   OLED SCL  →  PB6  (CN10 pin 17)
+//   OLED SDA  →  PB7  (CN10 pin 19)
 //
 // NOTE: The OLED module PCB includes on-board pull-up resistors.
 //       No external pull-ups are needed on the breadboard.
@@ -18,8 +18,7 @@
 #include <stdint.h>
 
 // =========================================================================
-// I2C1_Init — configure I2C1 at 400 kHz (fast mode) on PB6/PB7
-// Call once before any I2C transfer.
+// I2C1_Init — configure I2C1 at 400 kHz (fast mode) on PB6 (SCL) / PB7 (SDA)// Call once before any I2C transfer.
 // =========================================================================
 void I2C1_Init(void);
 
