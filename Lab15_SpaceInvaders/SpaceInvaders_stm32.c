@@ -5,18 +5,18 @@
 //
 // Ported to: STM32 F446RE @ 16 MHz HSI, SSD1306 OLED 128×64 (I2C1 PB6/PB7),
 //            square trimming pot PA0/ADC1, fire buttons PC6/PC8 (EXTI9_5),
-//            R-2R DAC PB3-PB6 (Lab13 pattern), no TExaS grader
+//            R-2R DAC PB0-PB3 (conflict-free with I2C), no TExaS grader
 //
 // =========================================================================
 // HARDWARE WIRING
 // =========================================================================
 //
 //  DISPLAY (SSD1306 I2C OLED 128×64):
-//    PB6 (SCL)  CN9 pin 10  ←→  SSD1306 SCL
-//    PB7 (SDA)  CN9 pin 3   ←→  SSD1306 SDA
-//    3.3V        CN8 pin 4   →   SSD1306 VCC
-//    GND                     →   SSD1306 GND
-//    (Add 4.7kΩ pull-ups on SCL and SDA to 3.3V)
+//    PB6 (SCL)  CN10 pin 17  (Arduino D10)  ↔  SSD1306 SCL
+//    PB7 (SDA)  CN10 pin 19               ↔  SSD1306 SDA
+//    3.3V        CN8 pin 4                →   SSD1306 VCC
+//    GND                                  →   SSD1306 GND
+//    (Module has on-board pull-ups; no external resistors needed)
 //
 //  TRIMMING POTENTIOMETER (player ship position):
 //    PA0  (CN8 pin 1 "A0")  ←  wiper
@@ -29,10 +29,11 @@
 //    PC8  (CN10 pin 3)   ← laser  button   (press = 3.3V high → EXTI8 rise)
 //
 //  SOUND DAC (R-2R ladder → buzzer optional):
-//    PB3  (CN10 pin 31)  ← bit 0 (LSB, 8R)
-//    PB4  (CN10 pin 27)  ← bit 1 (4R)
-//    PB5  (CN10 pin 29)  ← bit 2 (2R)
-//    PB6  (CN10 pin 17)  ← bit 3 (MSB, R)
+//    PB0  (CN8  pin 5  / Arduino A3) ← bit 0 (LSB)
+//    PB1  (CN10 pin 24)              ← bit 1
+//    PB2  (CN10 pin 22)              ← bit 2
+//    PB3  (CN10 pin 26 / Arduino D3) ← bit 3 (MSB)
+//    NOTE: moved from PB3–PB6 → PB0–PB3 to free PB6 for I2C1_SCL
 //
 // =========================================================================
 // ARCHITECTURE DIFFERENCES FROM ORIGINAL
@@ -51,10 +52,7 @@
 //  Boundary X   82                      126
 //  Boundary Y   48                      64
 //
-// =========================================================================
-// References:
-//   RM0390 §11 (ADC), §8.4 (GPIO), §10 (EXTI/SYSCFG), §4 (SysTick)
-//   PM0214 §4.4 (SysTick programmer's model)
+
 #include "random.h"
 #include "sound_stm32.h"
 #include "ssd1306.h"
