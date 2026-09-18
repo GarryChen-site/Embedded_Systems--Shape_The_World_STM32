@@ -7,7 +7,7 @@
 //   Each sound function calls tone_burst(half_period, cycles):
 //   - Steps through the 32-sample sine table once per cycle
 //   - Uses a spin-loop delay between samples to set the frequency
-//   - Writes each sample to the R-2R DAC (PB3-PB6) via DAC_Out()
+//   - Writes each sample to the R-2R DAC (PB0-PB3) via DAC_Out()
 //
 // FREQUENCY APPROXIMATION (16 MHz CPU, compiler -O1):
 //   Each spin-loop iteration ≈ 4-6 cycles.
@@ -50,7 +50,10 @@ static void tone_burst(uint32_t half_period, uint32_t cycles) {
   DAC_Out(8U);
 }
 
-void Sound_Init(void) { DAC_Init(); }
+void Sound_Init(void) {
+  // set up PB0-PB3 as outputs
+  DAC_Init();
+}
 
 void Sound_Play(const uint8_t *pt, uint32_t count) {
   (void)pt;
