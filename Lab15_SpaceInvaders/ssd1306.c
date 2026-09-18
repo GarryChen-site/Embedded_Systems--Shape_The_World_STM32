@@ -6,8 +6,8 @@
 // =========================================================================
 // HARDWARE WIRING
 // =========================================================================
-//   PB6 (SCL)  CN6 pin 7
-//   PB7 (SDA)  CN6 pin 11
+//   PB6 (SCL)  CN10 pin 17  (Arduino D10)
+//   PB7 (SDA)  CN10 pin 19
 //   3.3V        CN8 pin 4
 //   GND         SSD1306 GND
 //
@@ -38,14 +38,14 @@
 // I2C COMMUNICATION
 // =========================================================================
 //   I2C1, 400 kHz Fast Mode, polling (no DMA/IRQ)
-//   PB6/PB7 → AF4, open-drain, internal pull-up
+//   PB6/PB7 → AFRL bits[27:24]/[31:28] = AF4, open-drain, pull-up
 //
 //   SSD1306 command write:  START + (0x3C<<1|0) + 0x00 + cmd_byte + STOP
 //   SSD1306 data stream:    START + (0x3C<<1|0) + 0x40 + byte0 + … + byteN +
 //   STOP
 //
-#include "ssd1306.h"
 
+#include "ssd1306.h"
 #include <stdint.h>
 
 // =========================================================================
@@ -55,16 +55,17 @@
 #define RCC_APB1ENR (*((volatile uint32_t *)0x40023840U))
 
 // =========================================================================
-// GPIOB (PB6 = I2C1_SCL, PB7 = I2C1_SDA)
+// GPIOB (PB6 = I2C1_SCL, PB7 = I2C1_SDA)  (RM0390 §8.4)
 // =========================================================================
 #define GPIOB_MODER (*((volatile uint32_t *)0x40020400U))
 #define GPIOB_OTYPER (*((volatile uint32_t *)0x40020404U))
 #define GPIOB_OSPEEDR (*((volatile uint32_t *)0x40020408U))
 #define GPIOB_PUPDR (*((volatile uint32_t *)0x4002040CU))
-#define GPIOB_AFRH (*((volatile uint32_t *)0x40020424U))
-// ================================
-// I2C1 registers
-// ================================
+#define GPIOB_AFRL (*((volatile uint32_t *)0x40020420U)) // AF for PB0-PB7
+
+// =========================================================================
+// I2C1 registers (base 0x40005400)  (RM0390 §27.6)
+// =========================================================================
 #define I2C1_CR1 (*((volatile uint32_t *)0x40005400U))
 #define I2C1_CR2 (*((volatile uint32_t *)0x40005404U))
 #define I2C1_DR (*((volatile uint32_t *)0x40005410U))
@@ -74,30 +75,32 @@
 #define I2C1_TRISE (*((volatile uint32_t *)0x40005420U))
 
 // I2C1_SR1 bits
-#define I2C_SR1_SB (1U << 0)
-#define I2C_SR1_ADDR (1U << 1)
-#define I2C_SR1_BTF (1U << 2)
-#define I2C_SR1_TXE (1U << 7)
+#define I2C_SR1_SB (1U << 0)   // start bit sent
+#define I2C_SR1_ADDR (1U << 1) // address sent + ACK received
+#define I2C_SR1_BTF (1U << 2)  // byte transfer finished
+#define I2C_SR1_TXE (1U << 7)  // data register empty
 
 // I2C1_CR1 bits
-#define I2C_CR1_PE (1U << 0);
-#define I2C_CR1_START (1U << 8);
-#define I2C_CR1_STOP (1U << 9);
-#define I2C_CR1_SWRST (1U << 15);
+#define I2C_CR1_PE (1U << 0)     // peripheral enable
+#define I2C_CR1_START (1U << 8)  // generate START
+#define I2C_CR1_STOP (1U << 9)   // generate STOP
+#define I2C_CR1_SWRST (1U << 15) // software reset
 
-// ==================================================
-// Frame buffer - 128 columns x 8 pages = 1024 bytes
-// ==================================================
+// =========================================================================
+// Frame buffer — 128 columns × 8 pages = 1024 bytes
+// =========================================================================
 uint8_t ScreenBuffer[SCREENW * (SCREENH / 8)];
 
-// ==================================================
+// =========================================================================
 // Text cursor (character units)
-// ==================================================
-static uint8_t CursorX = 0;
-static uint8_t CursorY = 0;
+// =========================================================================
+static uint8_t CursorX = 0; // character column (0-20, 6 px per char)
+static uint8_t CursorY = 0; // page row         (0-7,  8 px per page)
 
 // =========================================================================
 // 5×8 pixel font — 96 glyphs (0x20 space … 0x7F)
+// Identical to the ASCII table in Nokia5110.h; copied here to avoid
+// pulling in the Nokia5110 header.
 // =========================================================================
 static const uint8_t Font5x8[][5] = {
     {0x00, 0x00, 0x00, 0x00, 0x00}, // 0x20 space
@@ -198,85 +201,85 @@ static const uint8_t Font5x8[][5] = {
     {0x1F, 0x24, 0x7C, 0x24, 0x1F}, // 0x7F (UT sign)
 };
 
-// ======================================
-// Low-level I2C1 primitives
-// ======================================
+// =========================================================================
+// Low-level I2C1 primitives  (RM0390 §27.3 — master transmitter)
+// =========================================================================
 
 static void i2c1_start(void) {
   I2C1_CR1 |= I2C_CR1_START;
   while (!(I2C1_SR1 & I2C_SR1_SB))
-    ;
+    ; // wait: start condition sent
 }
 
-// Send　7-bit address + W bit
+// Send 7-bit address + W bit (bit0=0)
 static void i2c1_addr(uint8_t addr7) {
-  I2C1_DR = (uint32_t)(addr7 << 1);
+  I2C1_DR = (uint32_t)(addr7 << 1); // write: R/W=0
   while (!(I2C1_SR1 & I2C_SR1_ADDR))
-    ;
+    ; // wait: address ACKed
   (void)I2C1_SR1;
-  (void)I2C1_SR2;
+  (void)I2C1_SR2; // clear ADDR flag (read SR1 then SR2)
 }
 
-// Send one byte
-// Waits for TXE (DR empty) before writing
+// Send one byte; waits for TXE (DR empty) before writing
 static void i2c1_byte(uint8_t b) {
   while (!(I2C1_SR1 & I2C_SR1_TXE))
-    ;
+    ; // wait: TX data register empty
   I2C1_DR = (uint32_t)b;
 }
 
 // Generate STOP after ensuring last byte is fully transmitted
 static void i2c1_stop(void) {
   while (!(I2C1_SR1 & I2C_SR1_TXE))
-    ;
+    ; // wait: DR empty
   while (!(I2C1_SR1 & I2C_SR1_BTF))
-    ;
+    ; // wait: shift register also empty
   I2C1_CR1 |= I2C_CR1_STOP;
 }
 
-// ==================================================
+// =========================================================================
 // SSD1306 command helpers
-// ==================================================
+// =========================================================================
 
 // Send a stream of command bytes in one I2C transaction
 // Control byte 0x00: Co=0 (multiple commands), D/C#=0 (command)
 static void ssd1306_cmd_stream(const uint8_t *cmds, uint32_t n) {
   i2c1_start();
   i2c1_addr(SSD1306_I2C_ADDR);
-  i2c1_byte(0x00U); // A control byte mainly consists of Co and D/C# bits
-                    // following by six “0” ‘s.
-  for (uint32_t i = 0U; i < n; i++) {
+  i2c1_byte(0x00U); // control: command stream
+  for (uint32_t i = 0U; i < n; i++)
     i2c1_byte(cmds[i]);
-  }
   i2c1_stop();
 }
 
-// ==========================================================
-// SSD1306_Init - configure I2C1 and initialize the display
-// ==========================================================
+// =========================================================================
+// SSD1306_Init — configure I2C1 and initialize the display
+// =========================================================================
 void SSD1306_Init(void) {
 
-  // 1. Enable clocks
-  RCC_AHB1ENR |= (1U << 1);
-  RCC_APB1ENR |= (1U << 21);
+  // 1. Enable clocks -------------------------------------------------
+  RCC_AHB1ENR |= (1U << 1);  // GPIOB  (AHB1ENR bit 1)
+  RCC_APB1ENR |= (1U << 21); // I2C1   (APB1ENR bit 21)
 
-  // 2. Configure PB6 (SCL) and PB7 (SDA)
+  // 2. Configure PB6 (SCL) and PB7 (SDA) ----------------------------
   //    AF mode (MODER=10), open-drain (OTYPER=1), high-speed (OSPEEDR=11)
-  //    Pull-up (PUPDR=01), AF4 (AFRH)
-  GPIOB_MODER &= ~((3U << 16) | (3U << 18)); // clear PB6/PB7
-  GPIOB_MODER |= ((2U << 16) | (2U << 18));  // AF mode
-  GPIOB_OTYPER |= (1U << 8) | (1U << 9);     // open-drain
-  GPIOB_OSPEEDR |= (3U << 16) | (3U << 18);  // high speed
-  GPIOB_PUPDR &= ~((3U << 16) | (3U << 18));
-  GPIOB_PUPDR |= (1U << 16) | (1U << 18); // pull-up
-  GPIOB_AFRH &= ~(0xFFU);                 // clear AF for PB6/PB7
-  GPIOB_AFRH |= (4U << 0) | (4U << 4);    // AF4 = I2C1
+  //    Pull-up (PUPDR=01), AF4 (AFRL)
+  //    PB6: MODER bits[13:12], OTYPER bit 6, OSPEEDR bits[13:12]
+  //    PB7: MODER bits[15:14], OTYPER bit 7, OSPEEDR bits[15:14]
+  //    AFRL: PB6=bits[27:24]=4, PB7=bits[31:28]=4  (Table 11, DS10693)
+  GPIOB_MODER &= ~((3U << 12) | (3U << 14)); // clear PB6/PB7
+  GPIOB_MODER |= ((2U << 12) | (2U << 14));  // AF mode
+  GPIOB_OTYPER |= (1U << 6) | (1U << 7);     // open-drain
+  GPIOB_OSPEEDR |= (3U << 12) | (3U << 14);  // high speed
+  GPIOB_PUPDR &= ~((3U << 12) | (3U << 14));
+  GPIOB_PUPDR |= (1U << 12) | (1U << 14);       // pull-up
+  GPIOB_AFRL &= ~((0xFU << 24) | (0xFU << 28)); // clear AF PB6+PB7
+  GPIOB_AFRL |= (4U << 24) | (4U << 28);        // AF4 = I2C1
 
-  // 3. Reset I2C1
+  // 3. Reset I2C1 ---------------------------------------------------
   I2C1_CR1 |= I2C_CR1_SWRST;
   I2C1_CR1 &= ~I2C_CR1_SWRST;
 
-  // 4. Configure I2C1 for 400kHz Fast mode
+  // 4. Configure I2C1 for 400 kHz Fast Mode -------------------------
   //    FREQ  = 16 (MHz, matches PCLK1)
   //    F/S=1 (fast mode), DUTY=0, CCR=14
   //      → Tscl = 3 × 14 × (1/16MHz) = 2625 ns → ~381 kHz
@@ -313,26 +316,29 @@ void SSD1306_Init(void) {
   };
   ssd1306_cmd_stream(init_cmds, sizeof(init_cmds));
 
-  // 6. Start with a blank screen
+  // 6. Start with a blank screen -----------------------------------
   SSD1306_ClearBuffer();
   SSD1306_DisplayBuffer();
 }
 
-// ==========================================================
-// SSD1306_ClearBuffer - zero the frame buffer (black screen)
-// ==========================================================
+// =========================================================================
+// SSD1306_ClearBuffer — zero the frame buffer (black screen)
+// =========================================================================
 void SSD1306_ClearBuffer(void) {
   for (uint32_t i = 0U; i < sizeof(ScreenBuffer); i++) {
     ScreenBuffer[i] = 0x00U;
   }
 }
 
-// ==========================================================
-// SSD1306_DisplayBuffer - send 1024-byte buffer to OLED
-// ==========================================================
+// =========================================================================
+// SSD1306_DisplayBuffer — send 1024-byte buffer to OLED
+// =========================================================================
 void SSD1306_DisplayBuffer(void) {
   // Reset column/page pointers to full screen (horizontal addressing mode)
-  static const uint8_t addr[] = {0x21, 0x00, 0x7F, 0x22, 0x00, 0x07};
+  static const uint8_t addr[] = {
+      0x21, 0x00, 0x7F, // column 0-127
+      0x22, 0x00, 0x07  // page 0-7
+  };
   ssd1306_cmd_stream(addr, sizeof(addr));
 
   // Send all 1024 bytes as one data stream
@@ -361,33 +367,35 @@ void SSD1306_DisplayBuffer(void) {
 // =========================================================================
 void SSD1306_PrintBMP(uint8_t xpos, uint8_t ypos, const uint8_t *ptr,
                       uint8_t threshold) {
-  uint8_t width = ptr[18];  // BMP width
+  uint8_t width = ptr[18]; // BMP width  (little-endian, ≤255 for these sprites)
   uint8_t height = ptr[22]; // BMP height
 
-  // Row stride
+  // Row stride: ceil(width/2) bytes, padded to 4-byte boundary
   uint32_t bytes_per_row = ((uint32_t)width + 1U) / 2U;
   uint32_t stride = ((bytes_per_row + 3U) / 4U) * 4U;
 
-  const uint8_t *pixels = ptr + 118U; // BMP pixel data
+  const uint8_t *pixels = ptr + 118U; // BMP pixel data offset = 0x76
 
   for (uint8_t r = 0U; r < height; r++) {
+    // screen_y: this BMP row's Y coordinate on screen
+    // BMP row 0 = bottom of sprite = ypos; row height-1 = top = ypos-(height-1)
     int32_t sy = (int32_t)ypos - (int32_t)r;
-    if (sy < 0 || sy >= (int32_t)SCREENH) {
+    if (sy < 0 || sy >= (int32_t)SCREENH)
       continue;
-    }
 
     uint32_t page = (uint32_t)sy / 8U;
     uint8_t bit = (uint8_t)((uint32_t)sy % 8U);
 
     for (uint8_t c = 0U; c < width; c++) {
       uint32_t sx = (uint32_t)xpos + (uint32_t)c;
-      if (sx >= (uint32_t)SCREENW) {
+      if (sx >= (uint32_t)SCREENW)
         continue;
-      }
 
       // Extract 4-bit color nibble
       uint8_t raw = pixels[r * stride + c / 2U];
-      uint8_t color = (c % 2U == 0U) ? (raw >> 4) & 0x0FU : raw & 0x0FU;
+      uint8_t color = (c % 2U == 0U)
+                          ? (raw >> 4) & 0x0FU // high nibble = left pixel
+                          : raw & 0x0FU;       // low  nibble = right pixel
 
       if (color > threshold) {
         ScreenBuffer[page * (uint32_t)SCREENW + sx] |= (uint8_t)(1U << bit);
@@ -395,9 +403,10 @@ void SSD1306_PrintBMP(uint8_t xpos, uint8_t ypos, const uint8_t *ptr,
     }
   }
 }
-// ==========================================================
+
+// =========================================================================
 // Text output functions
-// ==========================================================
+// =========================================================================
 
 void SSD1306_Clear(void) {
   SSD1306_ClearBuffer();
@@ -408,35 +417,30 @@ void SSD1306_Clear(void) {
 
 void SSD1306_SetCursor(uint8_t x, uint8_t y) {
   CursorX = x;
-  CursorY = y & 0x07U;
+  CursorY = y & 0x07U; // clamp to 0-7 pages
 }
 
 void SSD1306_OutChar(char c) {
-  if ((uint8_t)c < 0x20U || (uint8_t)c > 0x7FU) {
+  if ((uint8_t)c < 0x20U || (uint8_t)c > 0x7FU)
     c = ' ';
-  }
-
   const uint8_t *glyph = Font5x8[(uint8_t)c - 0x20U];
 
-  uint32_t col = (uint32_t)CursorX * 6U; // 5px wide + 1px gap
-  uint32_t page = (uint32_t)CursorY;     // 8-row band
+  uint32_t col = (uint32_t)CursorX * 6U; // 5 px glyph + 1 px gap
+  uint32_t page = (uint32_t)CursorY;
 
-  if ((col + 6U > (uint32_t)SCREENW) || page > 7U) {
+  if (col + 6U > (uint32_t)SCREENW || page > 7U)
     return;
-  }
 
   for (uint8_t i = 0U; i < 5U; i++) {
-    ScreenBuffer[page * 128 + col + i] = glyph[i];
+    ScreenBuffer[page * (uint32_t)SCREENW + col + i] = glyph[i];
   }
-
-  ScreenBuffer[page * 128 + col + 5U] = 0x00U;
+  ScreenBuffer[page * (uint32_t)SCREENW + col + 5U] = 0x00U; // spacing
 
   CursorX++;
   if ((uint32_t)CursorX * 6U >= (uint32_t)SCREENW) {
     CursorX = 0;
-    if (CursorY < 7) {
+    if (CursorY < 7U)
       CursorY++;
-    }
   }
 }
 
@@ -445,15 +449,13 @@ void SSD1306_OutString(const char *str) {
     SSD1306_OutChar(*str++);
 }
 
-void SSD1306_OutDec(uint16_t n) {
+void SSD1306_OutUDec(uint16_t n) {
   char buf[6]; // max "65535\0"
   uint8_t i = 5U;
   buf[5] = '\0';
-
   do {
-    buf[--i] = (char)((n % 10U) + '0');
+    buf[--i] = (char)('0' + (n % 10U));
     n = (uint16_t)(n / 10U);
   } while (n && i > 0U);
-
   SSD1306_OutString(&buf[i]);
 }
