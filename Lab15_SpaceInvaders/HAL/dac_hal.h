@@ -6,20 +6,16 @@
 //   PB0  (CN8  pin 5  / Arduino A3) ← bit 0 (LSB)
 //   PB1  (CN10 pin 24)              ← bit 1
 //   PB2  (CN10 pin 22)              ← bit 2
-//   PB3  (CN10 pin 26 / Arduino D3) ← bit 3 (MSB)
+//   PB4  (CN10 pin 27 / Arduino D12)← bit 3 (MSB)   [PB3 is SWO, reserved]
 //   R-2R output → Buzzer+ → Buzzer– → GND
 //
-// IOC: configure PB0, PB1, PB2, PB3 as GPIO_Output (push-pull, no pull).
-// CubeIDE generates HAL_GPIO_Init for these in MX_GPIO_Init().
-// DAC_HAL_Init() only needs to zero the outputs — no further init required.
+// IOC: configure PB0, PB1, PB2, PB4 as GPIO_Output (push-pull, no pull).
 
 #ifndef DAC_HAL_H
 #define DAC_HAL_H
 #include <stdint.h>
 
-// set all DAC outputs to 0 (silent)
-void DAC_HAL_Init(void);
-// write 4-bit value (0–15) to PB[3:0]
-void DAC_HAL_Out(uint8_t data);
+void DAC_HAL_Init(void);            // set all DAC outputs to 0 (silent)
+void DAC_HAL_Out(uint8_t data);     // write 4-bit value (0–15) to PB[3:0]
 
-#endif
+#endif /* DAC_HAL_H */
