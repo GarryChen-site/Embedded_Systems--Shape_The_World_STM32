@@ -23,7 +23,8 @@
 // This is acceptable because each sound is short and the game loop
 // already includes Delay1ms() calls.
 //
-// References: dac.c (PB3-PB6 R-2R ladder, Lab13 pattern)
+// References: dac.c (PB0-PB3 R-2R ladder, moved from PB3-PB6 to free I2C PB6)
+
 #include "sound_stm32.h"
 #include "dac.h"
 #include <stdint.h>
@@ -40,34 +41,51 @@ static const uint8_t sin_wave32[32] = {
 // cycles:      number of complete 32-sample sine cycles
 // -------------------------------------------------------------------------
 static void tone_burst(uint32_t half_period, uint32_t cycles) {
-  uint32_t total_sample = cycles * 32U;
-  for (uint32_t s = 0U; s < total_sample; s++) {
+  uint32_t total_samples = cycles * 32U;
+  for (uint32_t s = 0U; s < total_samples; s++) {
     DAC_Out(sin_wave32[s & 0x1FU]);
     volatile uint32_t t = half_period;
     while (t--)
-      ;
+      ; // spin-delay to set pitch
   }
-  DAC_Out(8U);
+  DAC_Out(0U); // return to 0V (silence, no DC load on buzzer)
 }
 
+// -------------------------------------------------------------------------
 void Sound_Init(void) {
-  // set up PB0-PB3 as outputs
-  DAC_Init();
+  DAC_Init(); // set up PB0..PB2, PB4 as outputs
 }
 
+// Sound_Play is a stub — PCM playback not implemented on STM32
 void Sound_Play(const uint8_t *pt, uint32_t count) {
   (void)pt;
   (void)count;
 }
 
-void Sound_Shoot(void) { tone_burst(50U, 4U); }
+// Arcade laser chirp — downward frequency sweep in buzzer's audible range
+void Sound_Shoot(void) {
+  for (uint32_t p = 140U; p <= 360U; p += 8U) {
+    for (uint32_t s = 0U; s < 32U; s++) {
+      DAC_Out(sin_wave32[s]);
+      volatile uint32_t t = p;
+      while (t--)
+        ;
+    }
+  }
+  DAC_Out(0U);
+}
 
-void Sound_Killed(void) { tone_burst(130U, 5U); }
+// Solid hit tone — enemy killed
+void Sound_Killed(void) { tone_burst(260U, 25U); }
 
-void Sound_Explosion(void) { tone_burst(350U, 6U); }
+// Low rumble — player or bunker hit
+void Sound_Explosion(void) { tone_burst(350U, 25U); }
 
-void Sound_Fastinvader1(void) { tone_burst(200U, 2U); }
-void Sound_Fastinvader2(void) { tone_burst(170U, 2U); }
-void Sound_Fastinvader3(void) { tone_burst(140U, 2U); }
-void Sound_Fastinvader4(void) { tone_burst(110U, 2U); }
-void Sound_Highpitch(void) { tone_burst(30U, 8U); }
+// March cadence tones (4 variations for enemy march)
+void Sound_Fastinvader1(void) { tone_burst(280U, 8U); }
+void Sound_Fastinvader2(void) { tone_burst(250U, 8U); }
+void Sound_Fastinvader3(void) { tone_burst(220U, 8U); }
+void Sound_Fastinvader4(void) { tone_burst(190U, 8U); }
+
+// UFO warble
+void Sound_Highpitch(void) { tone_burst(180U, 30U); }
