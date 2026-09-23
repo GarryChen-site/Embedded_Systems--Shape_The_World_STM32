@@ -20,13 +20,13 @@
 #define SSD1306_HAL_H
 #include <stdint.h>
 
-// Screen geometry
+// Screen geometry — identical to Nokia5110 replacements in ssd1306.h
 #define SCREENW    128
 #define SCREENH     64
 #define MAX_X      128
 #define MAX_Y       64
 
-// 7-bit I2C address (SA0=GND default).
+// 7-bit I2C address (SA0=GND default).  Change to 0x3D if SA0=VCC.
 #define SSD1306_I2C_ADDR_7   0x3C
 // HAL DevAddress (8-bit form = 7-bit << 1)
 #define SSD1306_I2C_ADDR     ((uint16_t)(SSD1306_I2C_ADDR_7 << 1))  // 0x78

@@ -18,11 +18,16 @@
 
 #include "sound_hal.h"
 #include "dac_hal.h"
+#include "stm32f4xx_hal.h"
 #include <stdint.h>
 
+// 32-point sine wave, 4-bit amplitude (0=min, 15=max)
 static const uint8_t sin_wave32[32] = {
-    8, 9, 11, 12, 13, 14, 14, 15, 15, 15, 14, 14, 13, 12, 11, 9,
-    8, 7, 5,  4,  3,  2,  2,  1,  1,  1,  2,  2,  3,  4,  5,  7};
+     8, 9,11,12,13,14,14,15,
+    15,15,14,14,13,12,11, 9,
+     8, 7, 5, 4, 3, 2, 2, 1,
+     1, 1, 2, 2, 3, 4, 5, 7
+};
 
 // -------------------------------------------------------------------------
 // tone_burst — play N full sine cycles at given pitch
@@ -30,33 +35,41 @@ static const uint8_t sin_wave32[32] = {
 // cycles      : number of complete 32-sample sine wave cycles
 // -------------------------------------------------------------------------
 static void tone_burst(uint32_t half_period, uint32_t cycles) {
-  uint32_t total = cycles * 32U;
-  for (uint32_t s = 0U; s < total; s++) {
-    DAC_HAL_Out(sin_wave32[s & 0x1FU]);
-    volatile uint32_t t = half_period;
-    while (t--)
-      ;
-  }
-  // return to DC mid-point (silence)
-  DAC_HAL_Out(8U);
+    uint32_t total = cycles * 32U;
+    for (uint32_t s = 0U; s < total; s++) {
+        DAC_HAL_Out(sin_wave32[s & 0x1FU]);
+        volatile uint32_t t = half_period;
+        while (t--);   // spin-delay to set pitch
+    }
+    DAC_HAL_Out(0U);   // return to 0V (silence, no DC load on buzzer)
 }
 
 // -------------------------------------------------------------------------
 void Sound_HAL_Init(void) {
-  DAC_HAL_Init(); // zero outputs (silent)
+    DAC_HAL_Init();    // zero outputs (silent)
 }
 
 // PCM stub — not implemented on STM32
 void Sound_Play(const uint8_t *pt, uint32_t count) {
-  (void)pt;
-  (void)count;
+    (void)pt; (void)count;
 }
 
-void Sound_Shoot(void) { tone_burst(50U, 4U); }
-void Sound_Killed(void) { tone_burst(130U, 5U); }
-void Sound_Explosion(void) { tone_burst(350U, 6U); }
-void Sound_Fastinvader1(void) { tone_burst(200U, 2U); }
-void Sound_Fastinvader2(void) { tone_burst(170U, 2U); }
-void Sound_Fastinvader3(void) { tone_burst(140U, 2U); }
-void Sound_Fastinvader4(void) { tone_burst(110U, 2U); }
-void Sound_Highpitch(void) { tone_burst(30U, 8U); }
+void Sound_Shoot(void) {
+    // Arcade laser chirp: downward frequency sweep into the buzzer's audible range
+    for (uint32_t p = 140U; p <= 360U; p += 8U) {
+        for (uint32_t s = 0U; s < 32U; s++) {
+            DAC_HAL_Out(sin_wave32[s]);
+            volatile uint32_t t = p;
+            while (t--);
+        }
+    }
+    DAC_HAL_Out(0U);
+}
+
+void Sound_Killed(void)       { tone_burst(260U, 25U); }
+void Sound_Explosion(void)    { tone_burst(350U, 25U); }
+void Sound_Fastinvader1(void) { tone_burst(280U,  8U); }
+void Sound_Fastinvader2(void) { tone_burst(250U,  8U); }
+void Sound_Fastinvader3(void) { tone_burst(220U,  8U); }
+void Sound_Fastinvader4(void) { tone_burst(190U,  8U); }
+void Sound_Highpitch(void)    { tone_burst(180U, 30U); }
