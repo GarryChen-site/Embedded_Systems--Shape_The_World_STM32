@@ -110,24 +110,19 @@
 // =========================================================================
 // Game global variables
 // =========================================================================
-volatile uint32_t ADCdata = 0; // raw 12-bit ADC result
-volatile uint32_t playerPosition =
-    0; // converted to 0-110 (player ship is 18 pixel)
+volatile uint32_t ADCdata = 0;
+volatile uint32_t playerPosition = 0; // 0-110 (SCREENW - PLAYERW)
 volatile uint32_t playerFlag = 0;
 volatile uint32_t laserFlag = 0;
 volatile uint32_t missileFlag = 0;
-
-uint32_t FrameCount = 0; // toggles 0->1->0->1 (2 animation poses)
-uint32_t randomnum = 0;  // incremented by button press and game event
+uint32_t FrameCount = 0; // 0,1,0,1,… for 2-frame animation
+uint32_t randomnum = 0;
 uint32_t currentLevel = 1;
-uint32_t numEnemies = 8; // 4 top row + 4 bottom row
-
-uint32_t playMissile = 8; // index into Missile[8] (0~7 used for enemies)
-uint32_t playLaser = 8;   // index into Laser[8] (0~7 used for player)
-
-int32_t enemyDir = 1; // +1 = moving right, -1 = moving left
-uint32_t enemyDrop =
-    0; // pixels to drop down this frame (0 = no drop, 2 = drop)
+uint32_t numEnemies = 8;
+uint32_t playMissile = 8; // index into Missile[] for player
+uint32_t playLaser = 8;   // index into Laser[]   for player
+int32_t enemyDir = 1;
+uint32_t enemyDrop = 0;
 
 // =========================================================================
 // BMP image data — identical to original (hardware-independent raw bytes)
@@ -530,82 +525,6 @@ const uint8_t Laser1[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF};
 
 // =========================================================================
-// ADC (STM32 ADC1 CH0 on PA0)
-// =========================================================================
-
-static void ADC0_Init(void) {
-  RCC_AHB1ENR |= (1U << 0);
-  GPIOA_MODER |= (3U << 0);
-
-  RCC_APB2ENR |= (1U << 8);
-  ADC_CCR &= ~(3U << 16);
-
-  ADC1_CR1 = 0U;
-  ADC1_CR2 = 0U;
-  ADC1_SQR1 = 0U;
-  ADC1_SQR3 = 0U;
-  ADC1_SMPR2 = (7U << 0);
-
-  ADC1_CR2 |= (1U << 0);
-  for (volatile uint32_t d = 0; d < 10000U; d++)
-    ;
-}
-
-static uint32_t ADC0_In(void) {
-  ADC1_CR2 |= (1U << 30);
-  while (!(ADC1_SR & (1U << 1)))
-    ;
-  return ADC1_DR & 0xFFFU;
-}
-
-// =========================================================================
-// SysTick at 30Hz (16 MHz / 30 = 533333)
-// Sending 1024 bytes over I2C at ~381 kHz (16MHz/42),
-// 1024 * 9 / 381,000 ~ 24 ms per frame
-// =========================================================================
-static void SysTick_Init_30Hz(void) {
-  STK_CTRL = 0U;
-  STK_VAL = 0U;
-  STK_LOAD = 533332U; // 16,000,000 / 30 -1 = 533332
-  SCB_SHPR3 = (SCB_SHPR3 & 0x00FFFFFF) | (2U << 29); // priority 2
-  STK_CTRL = 0x7U; // enable systick, enable interrupt, use processor clock
-}
-
-// =========================================================================
-// Fire buttons: PC6 = missile, PC8 = laser
-// Both are rising-edge, external pull-down to GND
-// =========================================================================
-static void Switch_Init(void) {
-  RCC_AHB1ENR |= (1U << 2); // enable GPIOC
-  GPIOC_MODER &= ~((3U << 12) | (3U << 16));
-
-  RCC_APB2ENR |= (1U << 14);
-
-  // Route PC6
-  SYSCFG_EXTICR2 &= ~(0xFU << 8);
-  SYSCFG_EXTICR2 |= (2U << 8);
-
-  // Route PC8
-  SYSCFG_EXTICR3 &= ~(0xFU << 0);
-  SYSCFG_EXTICR3 |= (2U << 0);
-
-  // Unmask EXTI6 and EXTI8
-  EXTI_IMR |= (1U << 6) | (1U << 8);
-  // Rising-edge trigger for EXTI6 and EXTI8
-  EXTI_RTSR |= (1U << 6) | (1U << 8);
-  // Clear any pending flags
-  EXTI_PR = (1U << 6) | (1U << 8);
-
-  // Enable EXTI9_5 in NVIC (IRQ23, in ISER0 bit 23)
-  NVIC_ISER0 |= (1U << 23);
-}
-
-// =========================================================================
-// Convert - ADC 12-bit -> player X position
-// =========================================================================
-static uint32_t Convert(uint32_t sample) { return (110U * sample) / 4095U; }
-
-// =========================================================================
 // Capture BMP dimensions from header bytes (width=ptr[18], height=ptr[22])
 // =========================================================================
 #define BUNKERW ((uint8_t)Bunker0[18])
@@ -624,28 +543,117 @@ static uint32_t Convert(uint32_t sample) { return (110U * sample) / 4095U; }
 #define MISSILEH ((uint8_t)Missile0[22])
 #define PLAYERW ((uint8_t)PlayerShip0[18])
 #define PLAYERH ((uint8_t)PlayerShip0[22])
+
 // =========================================================================
-// Game object state
+// Game object state (identical struct to original)
 // =========================================================================
 typedef struct {
   uint32_t x;
-  uint32_t maxpoint[2]; // range of x and y values
+  uint32_t maxpoint[2];
   uint32_t y;
-  const uint8_t *image[4]; // ptr->image
-  int32_t life;            // 0=dead, 1=alive
-  uint32_t deathCounter;   // number of cycles to show the explosion BMP image
+  const uint8_t *image[4];
+  int32_t life;
+  uint32_t deathCounter;
 } STyp;
 
 STyp Enemy[8];
 STyp Bunker;
 STyp Player;
 STyp Missile[9]; // [0-7] = enemy missiles, [8] = player missile
-STyp Laser[9];   // [0-7] = enemy lasers, [8] = player laser
+STyp Laser[9];   // [0-7] = enemy lasers,   [8] = player laser
 STyp UFO;
 
 // =========================================================================
-// Game object initializers
+// ADC (STM32 ADC1 CH0 on PA0)  — same logic as Lab14 adc.c
 // =========================================================================
+
+static void ADC0_Init(void) {
+  // Enable GPIOA clock
+  RCC_AHB1ENR |= (1U << 0);
+  // PA0 → analog mode (MODER = 11)
+  GPIOA_MODER |= (3U << 0);
+
+  // Enable ADC1 clock (APB2ENR bit 8)
+  RCC_APB2ENR |= (1U << 8);
+  // ADC prescaler = /2 (ADC_CCR bits [17:16] = 00)
+  ADC_CCR &= ~(3U << 16);
+
+  // ADC1 config: 12-bit, right-aligned, software trigger
+  ADC1_CR1 = 0U;          // 12-bit (RES=00), no scan
+  ADC1_CR2 = 0U;          // software trigger, right-aligned
+  ADC1_SQR1 = 0U;         // 1 conversion (L=0000)
+  ADC1_SQR3 = 0U;         // 1st conversion = channel 0 (PA0)
+  ADC1_SMPR2 = (7U << 0); // ch0 = 480 cycles (max stability)
+
+  // Power on ADC1
+  ADC1_CR2 |= (1U << 0); // ADON = 1
+  for (volatile uint32_t d = 0; d < 10000U; d++)
+    ; // stabilise
+}
+
+static uint32_t ADC0_In(void) {
+  ADC1_CR2 |= (1U << 30); // SWSTART
+  while (!(ADC1_SR & (1U << 1)))
+    ;                       // wait EOC
+  return ADC1_DR & 0x0FFFU; // read 12-bit result (clears EOC)
+}
+
+// =========================================================================
+// SysTick at 30 Hz (16 MHz / 30 = 533333)
+// =========================================================================
+static void SysTick_Init_30Hz(void) {
+  STK_CTRL = 0U;
+  STK_VAL = 0U;
+  STK_LOAD = 533332U; // 16,000,000/30 - 1 = 533332
+  SCB_SHPR3 = (SCB_SHPR3 & 0x00FFFFFFU) | (2U << 29); // priority 2
+  STK_CTRL = 0x00000007U; // ENABLE | TICKINT | CLKSOURCE(AHB)
+}
+
+// =========================================================================
+// Fire buttons: PC6 = missile (EXTI6), PC8 = laser (EXTI8)
+// Both are rising-edge, external pull-down to GND
+// =========================================================================
+static void Switch_Init(void) {
+  // Enable GPIOC clock
+  RCC_AHB1ENR |= (1U << 2);
+  // PC6, PC8: input (MODER=00, default after reset)
+  GPIOC_MODER &= ~((3U << 12) | (3U << 16));
+
+  // Enable SYSCFG clock (APB2ENR bit 14)
+  RCC_APB2ENR |= (1U << 14);
+
+  // Route PC6 → EXTI6: SYSCFG_EXTICR2 bits [11:8] = 0010 (Port C)
+  SYSCFG_EXTICR2 &= ~(0xFU << 8);
+  SYSCFG_EXTICR2 |= (2U << 8);
+
+  // Route PC8 → EXTI8: SYSCFG_EXTICR3 bits [3:0] = 0010 (Port C)
+  SYSCFG_EXTICR3 &= ~(0xFU << 0);
+  SYSCFG_EXTICR3 |= (2U << 0);
+
+  // Unmask EXTI6 and EXTI8
+  EXTI_IMR |= (1U << 6) | (1U << 8);
+  // Rising-edge trigger for EXTI6 and EXTI8
+  EXTI_RTSR |= (1U << 6) | (1U << 8);
+  // Clear any pending flags
+  EXTI_PR = (1U << 6) | (1U << 8);
+
+  // Enable EXTI9_5 in NVIC (IRQ23, in ISER0 bit 23)
+  NVIC_ISER0 |= (1U << 23);
+}
+
+// =========================================================================
+// Convert — ADC 12-bit → player X position  (0 to SCREENW-PLAYERW)
+//
+// Original: (66 * sample) / 4095  where 66 = 84 - PLAYERW(18)
+// STM32:   (110 * sample) / 4095  where 110 = 128 - PLAYERW(18)
+// =========================================================================
+static uint32_t Convert(uint32_t sample) { return (110U * sample) / 4095U; }
+
+// =========================================================================
+// Game object initializers
+// (coordinates updated for 128×64 screen; logic unchanged)
+// =========================================================================
+
 void UFO_Init(void) {
   UFO.x = 0;
   UFO.y = 10;
@@ -667,69 +675,59 @@ void UFO_Move(void) {
   }
 }
 
-// 8 enemies arranged in 2 rows × 4 columns near the top of the 128×64 screen
 void Enemy_Init(void) {
   int i;
   for (i = 0; i < (int)numEnemies; i++) {
-    // Spacing = 15 pixels. Enemy width = 16 pixels → enemies overlap by 1
-    // pixel, which is tight but intentional
     Enemy[i].x = 15U * (uint32_t)(i % 4);
-    if (i < 4) { // row 0 - y=10 from top
+    if (i < 4) {
       Enemy[i].y = 10;
-      // top-left     = (Enemy[i].x, Enemy[i].y)
-      // bottom-right = (Enemy[i].maxpoint[0], Enemy[i].maxpoint[1])
-      Enemy[i].maxpoint[0] = Enemy[i].x + ENEMY30W; // right edge = x + 16
-      Enemy[i].maxpoint[1] = Enemy[i].y + ENEMY30H; // bottom edge = y + 10
-      Enemy[i].image[0] = SmallEnemy30PointA;       // animation frame 0
-      Enemy[i].image[1] = SmallEnemy30PointB;       // animation frame 1
+      Enemy[i].maxpoint[0] = Enemy[i].x + ENEMY30W;
+      Enemy[i].maxpoint[1] = Enemy[i].y + ENEMY30H;
+      Enemy[i].image[0] = SmallEnemy30PointA;
+      Enemy[i].image[1] = SmallEnemy30PointB;
     } else if (i >= 4 || i < 8) {
-      Enemy[i].y = 10 + ENEMY30H; // row 1 - y=10+10=20
+      Enemy[i].y = 10 + ENEMY30H;
       Enemy[i].maxpoint[0] = Enemy[i].x + ENEMY10W;
       Enemy[i].maxpoint[1] = Enemy[i].y + ENEMY10H;
       Enemy[i].image[0] = SmallEnemy10PointA;
       Enemy[i].image[1] = SmallEnemy10PointB;
-    } else { // dead code (never reached with numEnumies=8)
+    } else {
       Enemy[i].y = 10 + ENEMY30H + ENEMY20H;
       Enemy[i].maxpoint[0] = Enemy[i].x + ENEMY20W;
       Enemy[i].maxpoint[1] = Enemy[i].y + ENEMY20H;
       Enemy[i].image[0] = SmallEnemy20PointA;
       Enemy[i].image[1] = SmallEnemy20PointB;
     }
-    Enemy[i].life = 1;         // alive
-    Enemy[i].deathCounter = 3; // 3 frames of death animation
+    Enemy[i].life = 1;
+    Enemy[i].deathCounter = 3;
   }
 }
 
 void Enemy_Move(void) {
   int i;
-  int minY = 64;
+  int minY = 64; // STM32: SCREENH=64 (was 48)
   for (i = 0; i < (int)numEnemies; i++) {
-    Enemy[i].x += (uint32_t)enemyDir;           // horizontal: +1 right, -1 left
-    Enemy[i].maxpoint[0] += (uint32_t)enemyDir; // keep bounding box in sync
-    Enemy[i].y += enemyDrop;                    // vertical: 0=stay, 2=drop
-    Enemy[i].maxpoint[1] += enemyDrop;          // keep bouding box in sync
-    if ((int)Enemy[i].y < minY) {               // track highest enemy
+    Enemy[i].x = (uint32_t)((int32_t)Enemy[i].x + enemyDir);
+    Enemy[i].maxpoint[0] = (uint32_t)((int32_t)Enemy[i].maxpoint[0] + enemyDir);
+    Enemy[i].y += enemyDrop;
+    Enemy[i].maxpoint[1] += enemyDrop;
+    if ((int)Enemy[i].y < minY)
       minY = (int)Enemy[i].y;
-    }
   }
-  // reset: drop only happens for exactly one frame
   enemyDrop = 0;
   for (i = 0; i < (int)numEnemies; i++) {
     if (Enemy[i].life > 0) {
-      if (Enemy[i].maxpoint[0] >= 126U) {        // right edge hit right wall
-        enemyDir = (-1) * (int32_t)currentLevel; // reverse direction
-        enemyDrop = 2;                           // schedule a drop
+      if (Enemy[i].maxpoint[0] >= 126U) { // STM32: was 82
+        enemyDir = (-1) * (int32_t)currentLevel;
+        enemyDrop = 2;
       }
-      if (Enemy[i].x <= 0U) { // left edge hit left wall
+      if ((int32_t)Enemy[i].x <= 0) {
+        Enemy[i].x = 0;
         enemyDir = 1 * (int32_t)currentLevel;
         enemyDrop = 2;
       }
     }
   }
-
-  // enemies are not too close to the top
-  // no UFO already on screen
-  // rare random window
   if (minY > 20 && UFO.life <= 0 && randomnum > 8 && randomnum <= 10) {
     UFO_Init();
   }
@@ -740,16 +738,16 @@ void Bunker_Init(void) {
   Bunker.y = 63U - PLAYERH; // just above player (63 = bottom)
   Bunker.maxpoint[0] = Bunker.x + BUNKERW;
   Bunker.maxpoint[1] = Bunker.y + BUNKERH;
-  Bunker.image[0] = Bunker0; // full bunker
-  Bunker.image[1] = Bunker1; // slight damage craters
-  Bunker.image[2] = Bunker2; // heavily eroded
-  Bunker.image[3] = Bunker3; // blank
-  Bunker.life = 10;          // bunker survives exactly 5 enemy missiles
+  Bunker.image[0] = Bunker0;
+  Bunker.image[1] = Bunker1;
+  Bunker.image[2] = Bunker2;
+  Bunker.image[3] = Bunker3;
+  Bunker.life = 10;
 }
 
 void Player_Init(void) {
-  Player.x = 55U;
-  Player.y = 63U;
+  Player.x = 55U; // centered: (128-18)/2 = 55
+  Player.y = 63U; // STM32: bottom row = 63 (was 47)
   Player.maxpoint[0] = Player.x + PLAYERW;
   Player.maxpoint[1] = Player.y + PLAYERH;
   Player.image[0] = PlayerShip0;
@@ -764,29 +762,22 @@ void Player_Move(uint32_t position) {
 }
 
 void Player_Missile_Init(void) {
-  // center of player ship
   Missile[playMissile].x = Player.x + (PLAYERW / 2U);
-  // slightly above the player's base row
   Missile[playMissile].y = Player.y - 4U;
-  // sets the right and bottom edges of the collision box
   Missile[playMissile].maxpoint[0] = Missile[playMissile].x + MISSILEW;
   Missile[playMissile].maxpoint[1] = Missile[playMissile].y + MISSILEH;
   Missile[playMissile].image[0] = Missile0;
   Missile[playMissile].image[1] = Missile2;
   Missile[playMissile].life = 1;
   Missile[playMissile].deathCounter = 3;
+  Sound_Shoot();
 }
 
 void Enemy_Missile_Init(void) {
   int i;
   for (i = 0; i < (int)numEnemies; i++) {
-    // randomnum ensures enemies don't all fire simultaneously
-    // (i + 2) keep missile and laser offsets different
-    // the shared randomnum approach makes simultaneous firing mathematically
-    // impossible
     if ((Enemy[i].life > 0) && (Missile[i].life <= 0) &&
         ((i + 2) == (int)randomnum)) {
-      // only the front-row enemy in each column can fire.
       if ((i >= 4) || (Enemy[i % 4].life <= 0)) {
         Missile[i].x = Enemy[i].x + (ENEMY30W / 2U);
         Missile[i].y = Enemy[i].y + 4U;
@@ -802,7 +793,8 @@ void Enemy_Missile_Init(void) {
 }
 
 void Missile_Move(void) {
-  if ((Missile[playMissile].life == 1) && (Missile[playMissile].y <= 64U)) {
+  if ((Missile[playMissile].life == 1) &&
+      (Missile[playMissile].y <= 64U)) { // was 48
     Missile[playMissile].y -= 3U;
     Missile[playMissile].maxpoint[1] -= 3U;
   } else {
@@ -813,7 +805,7 @@ void Missile_Move(void) {
 void Enemy_Missile_Move(void) {
   int i;
   for (i = 0; i < (int)numEnemies; i++) {
-    if ((Missile[i].life == 1) && (Missile[i].y <= 64U)) {
+    if ((Missile[i].life == 1) && (Missile[i].y <= 64U)) { // was 48
       Missile[i].y += 3U;
       Missile[i].maxpoint[1] += 3U;
     } else {
@@ -875,15 +867,12 @@ void Enemy_Laser_Move(void) {
 }
 
 // =========================================================================
-// Check_Damage - collision detection
+// Check_Damage — collision detection (identical to original, LEDs removed)
 // =========================================================================
 void Check_Damage(void) {
   int i, j;
-
-  // enemy missiles / lasers vs bunker
+  // enemy missiles/lasers vs bunker
   for (j = 0; j < (int)numEnemies; j++) {
-    // bunker's collision box is 2 pixels wider on each side
-    // only the bottom 10 rows of the bunker receive enemy fire
     if ((Missile[j].life == 1) && (Bunker.life > 0) &&
         ((Bunker.x - 2U) <= Missile[j].x) &&
         (Missile[j].x <= (Bunker.maxpoint[0] + 2U)) &&
@@ -900,8 +889,6 @@ void Check_Damage(void) {
     }
   }
   // player missile vs bunker
-  // the player fires upward and
-  // the missile/laser bottom would hit the bunker from below.
   if ((Missile[playMissile].life == 1) && (Bunker.life > 0) &&
       ((Bunker.x - 2U) <= Missile[playMissile].x) &&
       (Missile[playMissile].x <= (Bunker.maxpoint[0] + 2U))) {
@@ -909,12 +896,12 @@ void Check_Damage(void) {
     Missile[playMissile].life = 0;
   }
   // player laser vs bunker
-  if ((Laser[playMissile].life == 1) && (Bunker.life > 0) &&
+  if ((Laser[playLaser].life == 1) && (Bunker.life > 0) &&
       ((Bunker.x - 2U) <= Laser[playLaser].x) &&
       (Laser[playLaser].x <= (Bunker.maxpoint[0] + 2U))) {
     Bunker.life -= 1;
+    Laser[playLaser].life = 0;
   }
-
   // enemy missiles/lasers vs player
   for (j = 0; j < (int)numEnemies; j++) {
     if ((Missile[j].life == 1) && (Player.life > 0) &&
@@ -924,7 +911,6 @@ void Check_Damage(void) {
       Missile[j].life = 0;
       Sound_Explosion();
     }
-
     if ((Laser[j].life == 1) && (Player.life > 0) && (Player.x <= Laser[j].x) &&
         (Laser[j].x <= Player.maxpoint[0]) &&
         (Player.y <= Laser[j].maxpoint[1])) {
@@ -933,7 +919,6 @@ void Check_Damage(void) {
       Sound_Explosion();
     }
   }
-
   // player missile/laser vs enemies
   for (i = 0; i < (int)numEnemies; i++) {
     if ((Missile[playMissile].life == 1) && (Enemy[i].life > 0) &&
@@ -941,7 +926,7 @@ void Check_Damage(void) {
         (Missile[playMissile].x <= Enemy[i].maxpoint[0]) &&
         (Enemy[i].y <= Missile[playMissile].y) &&
         (Missile[playMissile].y <= Enemy[i].maxpoint[1])) {
-      Enemy[i].life -= 1;
+      Enemy[i].life -= 2;
       Missile[playMissile].life = 0;
       Sound_Killed();
     }
@@ -957,12 +942,10 @@ void Check_Damage(void) {
     if (Enemy[i].life <= 0) {
       Enemy[i].image[0] = SmallExplosion0;
       Enemy[i].image[1] = SmallExplosion1;
-      if (Enemy[i].deathCounter > 0) {
+      if (Enemy[i].deathCounter > 0)
         Enemy[i].deathCounter--;
-      }
     }
   }
-
   // player missile/laser vs enemy missiles/lasers
   for (i = 0; i < (int)numEnemies; i++) {
     if ((Missile[playMissile].life == 1) &&
@@ -981,16 +964,13 @@ void Check_Damage(void) {
       Laser[playLaser].life = 0;
     }
   }
-
   // player death state
   if (Player.life <= 0) {
     Player.image[0] = BigExplosion0;
     Player.image[1] = BigExplosion1;
-    if (Player.deathCounter > 0) {
+    if (Player.deathCounter > 0)
       Player.deathCounter--;
-    }
   }
-
   // player missile/laser vs UFO
   if ((Missile[playMissile].life == 1) && (UFO.life > 0) &&
       (UFO.x <= Missile[playMissile].x) &&
@@ -1010,18 +990,17 @@ void Check_Damage(void) {
     Laser[playLaser].life = 0;
     Sound_Killed();
   }
-
   if (UFO.life <= 0) {
     UFO.image[0] = SmallExplosion0;
     UFO.image[1] = SmallExplosion1;
-    if (UFO.deathCounter > 0) {
+    if (UFO.deathCounter > 0)
       UFO.deathCounter--;
-    }
   }
 }
 
 // =========================================================================
-// Draw - clear buffer, blit all sprites, push to OLED
+// Draw — clear buffer, blit all sprites, push to OLED
+// (Nokia5110_* → SSD1306_* ; logic unchanged)
 // =========================================================================
 void Draw(void) {
   int i;
@@ -1038,17 +1017,15 @@ void Draw(void) {
       SSD1306_PrintBMP(Enemy[i].x, Enemy[i].y, Enemy[i].image[1], 0);
     }
   }
-
   // bunker
-  if (Bunker.life >= 7) {
+  if (Bunker.life >= 7)
     SSD1306_PrintBMP(Bunker.x, Bunker.y, Bunker.image[0], 0);
-  } else if (Bunker.life >= 4) {
+  else if (Bunker.life >= 4)
     SSD1306_PrintBMP(Bunker.x, Bunker.y, Bunker.image[1], 0);
-  } else if (Bunker.life >= 1) {
+  else if (Bunker.life >= 1)
     SSD1306_PrintBMP(Bunker.x, Bunker.y, Bunker.image[2], 0);
-  } else {
+  else
     SSD1306_PrintBMP(Bunker.x, Bunker.y, Bunker.image[3], 0);
-  }
 
   // player
   if (Player.life > 0) {
@@ -1058,7 +1035,6 @@ void Draw(void) {
   } else {
     SSD1306_PrintBMP(Player.x, Player.y, Player.image[1], 0);
   }
-
   // UFO
   if (UFO.life > 0) {
     SSD1306_PrintBMP(UFO.x, UFO.y, UFO.image[0], 0);
@@ -1067,52 +1043,47 @@ void Draw(void) {
   } else {
     SSD1306_PrintBMP(UFO.x, UFO.y, UFO.image[1], 0);
   }
-
   // missiles and lasers
   for (i = 0; i < (int)(numEnemies + 1U); i++) {
-    if (Missile[i].life == 1) {
+    if (Missile[i].life == 1)
       SSD1306_PrintBMP(Missile[i].x, Missile[i].y, Missile[i].image[0], 0);
-    }
-    if (Laser[i].life == 1) {
+    if (Laser[i].life == 1)
       SSD1306_PrintBMP(Laser[i].x, Laser[i].y, Laser[i].image[0], 0);
-    }
   }
   SSD1306_DisplayBuffer();
-  FrameCount =
-      (FrameCount + 1U) & 0x1U; // each enemy has exactly 2 animation poses.
+  FrameCount = (FrameCount + 1U) & 0x01U; // 0,1,0,1,…
 }
 
 // =========================================================================
 // Delay functions (loop counts scaled for 16 MHz)
-// Dalay100ms: 145000 iterations ~ 100ms
-// Delay1ms: 2667 iterations ~ 1ms
+// At 16 MHz / -O1: ~4-6 cycles/iteration
+// Delay100ms: 145000 iterations ≈ 100 ms (≡ 727240 × 16/80)
+// Delay1ms:     2667 iterations ≈   1 ms (≡  13333 × 16/80)
 // =========================================================================
 static void Delay100ms(uint32_t count) {
   while (count > 0U) {
     volatile uint32_t t = 145000U;
-    while (t) {
+    while (t)
       t--;
-    }
     count--;
   }
 }
 
 static void Delay1ms(uint32_t msec) {
   while (msec > 0U) {
-    volatile uint32_t t = 2667U;
-    while (t) {
-      t--;
-    }
+    volatile uint32_t i = 2667U;
+    while (i)
+      i--;
     msec--;
   }
 }
 
 // =========================================================================
-// Game_Over - freeze display with "GAME OVER" message
+// Game_Over — freeze display with "GAME OVER" message
 // =========================================================================
 static void Game_Over(void) {
   Delay100ms(2);
-  SSD1306_Clear();
+  SSD1306_ClearBuffer();
   SSD1306_SetCursor(2, 2);
   SSD1306_OutString("GAME OVER");
   SSD1306_SetCursor(2, 4);
@@ -1120,48 +1091,43 @@ static void Game_Over(void) {
   SSD1306_SetCursor(2, 5);
   SSD1306_OutString("Earthling!");
   SSD1306_DisplayBuffer();
-  while (1) {
-    // do nothing (halt)
-  }
+  while (1)
+    ; // halt
 }
 
 // =========================================================================
-// Level_Check - advance level or trigger Game Over
+// Level_Check — advance level or trigger Game Over
 // =========================================================================
-static void Level_check(void) {
+static void Level_Check(void) {
   int i;
   int enemiesDead = 0;
-  if (Player.life <= 0 && Player.deathCounter <= 0) {
+  if (Player.life <= 0 && Player.deathCounter <= 0)
     Game_Over();
-  }
   for (i = 0; i < (int)numEnemies; i++) {
-    if (Enemy[i].life <= 0) {
+    if (Enemy[i].life <= 0)
       enemiesDead++;
-    }
-    if ((Enemy[i].maxpoint[1] >= Player.y) && (Enemy[i].life > 0)) {
+    if ((Enemy[i].maxpoint[1] >= Player.y) && (Enemy[i].life > 0))
       Game_Over();
-    }
-
-    if (enemiesDead == (int)numEnemies) {
-      currentLevel++;
-      enemyDir = (int32_t)currentLevel;
-      Delay100ms(2);
-      SSD1306_Clear();
-      SSD1306_SetCursor(3, 2);
-      SSD1306_OutString("LEVEL");
-      SSD1306_SetCursor(10, 2);
-      SSD1306_OutUDec((uint16_t)currentLevel);
-      SSD1306_DisplayBuffer();
-      Delay100ms(5);
-      Enemy_Init();
-      Bunker_Init();
-      Player_Init();
-    }
+  }
+  if (enemiesDead == (int)numEnemies) {
+    currentLevel++;
+    enemyDir = (int32_t)currentLevel;
+    Delay100ms(2);
+    SSD1306_ClearBuffer();
+    SSD1306_SetCursor(3, 2);
+    SSD1306_OutString("LEVEL");
+    SSD1306_SetCursor(10, 2);
+    SSD1306_OutUDec((uint16_t)currentLevel);
+    SSD1306_DisplayBuffer();
+    Delay100ms(5);
+    Enemy_Init();
+    Bunker_Init();
+    Player_Init();
   }
 }
 
 // =========================================================================
-// SysTick_Handler = fires at 30 Hz; reads ADC, updats player position
+// SysTick_Handler — fires at 30 Hz; reads ADC, updates player position
 // =========================================================================
 void SysTick_Handler(void) {
   ADCdata = ADC0_In();
@@ -1170,21 +1136,20 @@ void SysTick_Handler(void) {
 }
 
 // =========================================================================
-// EXTI9_5_IRQHandler - fire buttons PC6 (missile) and PC8 (laser)
+// EXTI9_5_IRQHandler — fire buttons PC6 (missile) and PC8 (laser)
+// Replaces GPIOPortE_Handler from the original SpaceInvaders.c
 // =========================================================================
 void EXTI9_5_IRQHandler(void) {
-  // writing a 1 to the bit position you want to clear.
   uint32_t pr = EXTI_PR;
-  EXTI_PR = pr;
+  EXTI_PR = pr; // clear pending by writing 1 to asserted bits
 
-  if (pr & (1U << 6)) {
+  if (pr & (1U << 6)) { // PC6 rising edge → missile
     if (Missile[playMissile].life <= 0) {
       missileFlag = 1;
       randomnum += 3U;
     }
   }
-
-  if (pr & (1U << 8)) {
+  if (pr & (1U << 8)) { // PC8 rising edge → laser
     if (Laser[playLaser].life <= 0) {
       laserFlag = 1;
       randomnum += 5U;
@@ -1197,11 +1162,11 @@ void EXTI9_5_IRQHandler(void) {
 // =========================================================================
 int main(void) {
   // Initialize peripherals
-  Sound_Init();   // DAC on PB3-PB6
-  SSD1306_Init(); // OLED via I2C1 PB8/PB9
-  ADC0_Init();    // trimmer pot on PA0
-  Switch_Init();  // fire buttons PC6/PC8
-  Random_Init(1U);
+  Sound_Init();        // DAC on PB3-PB6 (R-2R)
+  SSD1306_Init();      // OLED via I2C1 PB8/PB9
+  ADC0_Init();         // trimmer pot on PA0
+  Switch_Init();       // fire buttons PC6/PC8 (EXTI9_5)
+  Random_Init(1U);     // seed XorShift PRNG
   SysTick_Init_30Hz(); // 30 Hz game timer
 
   // Initialize game world
@@ -1214,15 +1179,15 @@ int main(void) {
   Player_Init();
   Draw();
 
-  // main game loop
+  // Main game loop
   while (1) {
-    randomnum = (Random32() >> 24) % 60U;
+    randomnum = (Random32() >> 24) % 60U; // 0-59
 
     Enemy_Missile_Init();
     Enemy_Laser_Init();
     Enemy_Missile_Move();
     Enemy_Laser_Move();
-    Level_check();
+    Level_Check();
 
     if (playerFlag) {
       Player_Move(playerPosition);
@@ -1236,12 +1201,10 @@ int main(void) {
       Player_Laser_Init();
       laserFlag = 0;
     }
-    if (Missile[playMissile].life > 0) {
+    if (Missile[playMissile].life > 0)
       Missile_Move();
-    }
-    if (Laser[playLaser].life > 0) {
+    if (Laser[playLaser].life > 0)
       Laser_Move();
-    }
 
     Enemy_Move();
     UFO_Move();
