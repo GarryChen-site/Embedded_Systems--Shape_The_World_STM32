@@ -36,23 +36,25 @@
 #define GPIOB_MODER (*((volatile uint32_t *)0x40020400U))
 #define GPIOB_ODR (*((volatile uint32_t *)0x40020414U))
 
-// DAC uses GPIOB bits [3:0] = PB0(bit0) PB1(bit1) PB2(bit2) PB3(bit3)
-#define DAC_MASK (0xFU << 0) // bits 3,2,1,0
+// DAC uses PB0(bit0), PB1(bit1), PB2(bit2), PB4(bit3 MSB) — PB3 is SWO
+#define DAC_MASK ((1U << 0) | (1U << 1) | (1U << 2) | (1U << 4))
 
 void DAC_Init(void) {
   RCC_AHB1ENR |= (1U << 1); // enable GPIOB clock  (RM0390 §6.3.10)
   volatile uint32_t dummy = RCC_AHB1ENR;
   (void)dummy;
 
-  // PB0,PB1,PB2,PB3 → output (01)  (RM0390 §8.4.1)
-  GPIOB_MODER &= ~(0xFFU << 0); // clear MODER[7:0] (PB0..PB3)
-  GPIOB_MODER |= (0x55U << 0);  // 01 01 01 01 = output for each
+  // PB0, PB1, PB2, PB4 → output (01), preserving PB3 (SWO debug)
+  GPIOB_MODER &= ~((3U << 0) | (3U << 2) | (3U << 4) | (3U << 8));
+  GPIOB_MODER |= ((1U << 0) | (1U << 2) | (1U << 4) | (1U << 8));
 
   GPIOB_ODR &= ~DAC_MASK; // initialize DAC to 0 (silent)
 }
 
-// DAC_Out: write 4-bit value (0–15) to PB[3:0]
-// Bit 0 of data → PB0 (LSB), Bit 3 → PB3 (MSB)
+// DAC_Out: write 4-bit value (0–15) to PB0..PB2, PB4
+// Bit 0..2 → PB0..PB2, Bit 3 → PB4
 void DAC_Out(uint8_t data) {
-  GPIOB_ODR = (GPIOB_ODR & ~DAC_MASK) | ((data & 0xFU) << 0);
+  uint32_t odr = GPIOB_ODR & ~DAC_MASK;
+  odr |= ((uint32_t)(data & 0x07U)) | (((uint32_t)(data >> 3) & 1U) << 4);
+  GPIOB_ODR = odr;
 }
