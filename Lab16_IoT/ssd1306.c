@@ -1,0 +1,315 @@
+// ssd1306.c — SSD1306 OLED 128×64 Driver via I2C1 (Bare-Metal)
+//
+// Direct register implementation without HAL
+// Hardware:
+//   PB6 (SCL) -> CN10 pin 17
+//   PB7 (SDA) -> CN10 pin 19
+
+#include "ssd1306.h"
+#include <stdint.h>
+
+// =========================================================================
+// RCC REGISTERS (RM0390 §6.3)
+// =========================================================================
+#define RCC_AHB1ENR (*((volatile uint32_t *)0x40023830U))
+#define RCC_APB1ENR (*((volatile uint32_t *)0x40023840U))
+
+// =========================================================================
+// GPIOB REGISTERS (RM0390 §8.4)
+// =========================================================================
+#define GPIOB_MODER   (*((volatile uint32_t *)0x40020400U))
+#define GPIOB_OTYPER  (*((volatile uint32_t *)0x40020404U))
+#define GPIOB_OSPEEDR (*((volatile uint32_t *)0x40020408U))
+#define GPIOB_PUPDR   (*((volatile uint32_t *)0x4002040CU))
+#define GPIOB_AFRL    (*((volatile uint32_t *)0x40020420U))
+
+// =========================================================================
+// I2C1 REGISTERS (Base: 0x40005400 — RM0390 §27.6)
+// =========================================================================
+#define I2C1_CR1   (*((volatile uint32_t *)0x40005400U))
+#define I2C1_CR2   (*((volatile uint32_t *)0x40005404U))
+#define I2C1_DR    (*((volatile uint32_t *)0x40005410U))
+#define I2C1_SR1   (*((volatile uint32_t *)0x40005414U))
+#define I2C1_SR2   (*((volatile uint32_t *)0x40005418U))
+#define I2C1_CCR   (*((volatile uint32_t *)0x4000541CU))
+#define I2C1_TRISE (*((volatile uint32_t *)0x40005420U))
+
+#define I2C_SR1_SB   (1U << 0) // Start bit sent
+#define I2C_SR1_ADDR (1U << 1) // Address matched
+#define I2C_SR1_BTF  (1U << 2) // Byte transfer finished
+#define I2C_SR1_TXE  (1U << 7) // Data register empty
+
+#define I2C_CR1_PE    (1U << 0)  // Peripheral enable
+#define I2C_CR1_START (1U << 8)  // Generate START
+#define I2C_CR1_STOP  (1U << 9)  // Generate STOP
+#define I2C_CR1_SWRST (1U << 15) // Software reset
+
+// 1024-byte screen buffer (128 columns x 8 pages)
+static uint8_t ScreenBuffer[SCREENW * (SCREENH / 8)];
+static uint8_t CursorX = 0; // 0..20
+static uint8_t CursorY = 0; // 0..7
+
+// Standard 5x8 ASCII Font Table
+static const uint8_t Font5x8[][5] = {
+    {0x00, 0x00, 0x00, 0x00, 0x00}, // space
+    {0x00, 0x00, 0x5F, 0x00, 0x00}, // !
+    {0x00, 0x07, 0x00, 0x07, 0x00}, // "
+    {0x14, 0x7F, 0x14, 0x7F, 0x14}, // #
+    {0x24, 0x2A, 0x7F, 0x2A, 0x12}, // $
+    {0x23, 0x13, 0x08, 0x64, 0x62}, // %
+    {0x36, 0x49, 0x55, 0x22, 0x50}, // &
+    {0x00, 0x05, 0x03, 0x00, 0x00}, // '
+    {0x00, 0x1C, 0x22, 0x41, 0x00}, // (
+    {0x00, 0x41, 0x22, 0x1C, 0x00}, // )
+    {0x14, 0x08, 0x3E, 0x08, 0x14}, // *
+    {0x08, 0x08, 0x3E, 0x08, 0x08}, // +
+    {0x00, 0x50, 0x30, 0x00, 0x00}, // ,
+    {0x08, 0x08, 0x08, 0x08, 0x08}, // -
+    {0x00, 0x60, 0x60, 0x00, 0x00}, // .
+    {0x20, 0x10, 0x08, 0x04, 0x02}, // /
+    {0x3E, 0x51, 0x49, 0x45, 0x3E}, // 0
+    {0x00, 0x42, 0x7F, 0x40, 0x00}, // 1
+    {0x42, 0x61, 0x51, 0x49, 0x46}, // 2
+    {0x21, 0x41, 0x45, 0x4B, 0x31}, // 3
+    {0x18, 0x14, 0x12, 0x7F, 0x10}, // 4
+    {0x27, 0x45, 0x45, 0x45, 0x39}, // 5
+    {0x3C, 0x4A, 0x49, 0x49, 0x30}, // 6
+    {0x01, 0x71, 0x09, 0x05, 0x03}, // 7
+    {0x36, 0x49, 0x49, 0x49, 0x36}, // 8
+    {0x06, 0x49, 0x49, 0x29, 0x1E}, // 9
+    {0x00, 0x36, 0x36, 0x00, 0x00}, // :
+    {0x00, 0x56, 0x36, 0x00, 0x00}, // ;
+    {0x08, 0x14, 0x22, 0x41, 0x00}, // <
+    {0x14, 0x14, 0x14, 0x14, 0x14}, // =
+    {0x00, 0x41, 0x22, 0x14, 0x08}, // >
+    {0x02, 0x01, 0x51, 0x09, 0x06}, // ?
+    {0x32, 0x49, 0x79, 0x41, 0x3E}, // @
+    {0x7E, 0x11, 0x11, 0x11, 0x7E}, // A
+    {0x7F, 0x49, 0x49, 0x49, 0x36}, // B
+    {0x3E, 0x41, 0x41, 0x41, 0x22}, // C
+    {0x7F, 0x41, 0x41, 0x22, 0x1C}, // D
+    {0x7F, 0x49, 0x49, 0x49, 0x41}, // E
+    {0x7F, 0x09, 0x09, 0x09, 0x01}, // F
+    {0x3E, 0x41, 0x49, 0x49, 0x7A}, // G
+    {0x7F, 0x08, 0x08, 0x08, 0x7F}, // H
+    {0x00, 0x41, 0x7F, 0x41, 0x00}, // I
+    {0x20, 0x40, 0x41, 0x3F, 0x01}, // J
+    {0x7F, 0x08, 0x14, 0x22, 0x41}, // K
+    {0x7F, 0x40, 0x40, 0x40, 0x40}, // L
+    {0x7F, 0x02, 0x0C, 0x02, 0x7F}, // M
+    {0x7F, 0x04, 0x08, 0x10, 0x7F}, // N
+    {0x3E, 0x41, 0x41, 0x41, 0x3E}, // O
+    {0x7F, 0x09, 0x09, 0x09, 0x06}, // P
+    {0x3E, 0x41, 0x51, 0x21, 0x5E}, // Q
+    {0x7F, 0x09, 0x19, 0x29, 0x46}, // R
+    {0x46, 0x49, 0x49, 0x49, 0x31}, // S
+    {0x01, 0x01, 0x7F, 0x01, 0x01}, // T
+    {0x3F, 0x40, 0x40, 0x40, 0x3F}, // U
+    {0x1F, 0x20, 0x40, 0x20, 0x1F}, // V
+    {0x3F, 0x40, 0x38, 0x40, 0x3F}, // W
+    {0x63, 0x14, 0x08, 0x14, 0x63}, // X
+    {0x07, 0x08, 0x70, 0x08, 0x07}, // Y
+    {0x61, 0x51, 0x49, 0x45, 0x43}, // Z
+    {0x00, 0x7F, 0x41, 0x41, 0x00}, // [
+    {0x02, 0x04, 0x08, 0x10, 0x20}, // backslash
+    {0x00, 0x41, 0x41, 0x7F, 0x00}, // ]
+    {0x04, 0x02, 0x01, 0x02, 0x04}, // ^
+    {0x40, 0x40, 0x40, 0x40, 0x40}, // _
+    {0x00, 0x01, 0x02, 0x04, 0x00}, // `
+    {0x20, 0x54, 0x54, 0x54, 0x78}, // a
+    {0x7F, 0x48, 0x44, 0x44, 0x38}, // b
+    {0x38, 0x44, 0x44, 0x44, 0x20}, // c
+    {0x38, 0x44, 0x44, 0x48, 0x7F}, // d
+    {0x38, 0x54, 0x54, 0x54, 0x18}, // e
+    {0x08, 0x7E, 0x09, 0x01, 0x02}, // f
+    {0x0C, 0x52, 0x52, 0x52, 0x3E}, // g
+    {0x7F, 0x08, 0x04, 0x04, 0x78}, // h
+    {0x00, 0x44, 0x7D, 0x40, 0x00}, // i
+    {0x20, 0x40, 0x44, 0x3D, 0x00}, // j
+    {0x7F, 0x10, 0x28, 0x44, 0x00}, // k
+    {0x00, 0x41, 0x7F, 0x40, 0x00}, // l
+    {0x7C, 0x04, 0x18, 0x04, 0x78}, // m
+    {0x7C, 0x08, 0x04, 0x04, 0x78}, // n
+    {0x38, 0x44, 0x44, 0x44, 0x38}, // o
+    {0x7C, 0x14, 0x14, 0x14, 0x08}, // p
+    {0x08, 0x14, 0x14, 0x18, 0x7C}, // q
+    {0x7C, 0x08, 0x04, 0x04, 0x08}, // r
+    {0x48, 0x54, 0x54, 0x54, 0x20}, // s
+    {0x04, 0x3F, 0x44, 0x40, 0x20}, // t
+    {0x3C, 0x40, 0x40, 0x20, 0x7C}, // u
+    {0x1C, 0x20, 0x40, 0x20, 0x1C}, // v
+    {0x3C, 0x40, 0x30, 0x40, 0x3C}, // w
+    {0x44, 0x28, 0x10, 0x28, 0x44}, // x
+    {0x0C, 0x50, 0x50, 0x50, 0x3C}, // y
+    {0x44, 0x64, 0x54, 0x4C, 0x44}, // z
+    {0x00, 0x08, 0x36, 0x41, 0x00}, // {
+    {0x00, 0x00, 0x7F, 0x00, 0x00}, // |
+    {0x00, 0x41, 0x36, 0x08, 0x00}, // }
+    {0x10, 0x08, 0x08, 0x10, 0x08}, // ~
+    {0x1F, 0x24, 0x7C, 0x24, 0x1F}, // UT sign / degree symbol
+};
+
+static void i2c1_start(void) {
+    I2C1_CR1 |= I2C_CR1_START;
+    while (!(I2C1_SR1 & I2C_SR1_SB));
+}
+
+static void i2c1_addr(uint8_t addr7) {
+    I2C1_DR = (uint32_t)(addr7 << 1);
+    while (!(I2C1_SR1 & I2C_SR1_ADDR));
+    (void)I2C1_SR1;
+    (void)I2C1_SR2;
+}
+
+static void i2c1_byte(uint8_t b) {
+    while (!(I2C1_SR1 & I2C_SR1_TXE));
+    I2C1_DR = (uint32_t)b;
+}
+
+static void i2c1_stop(void) {
+    while (!(I2C1_SR1 & I2C_SR1_TXE));
+    while (!(I2C1_SR1 & I2C_SR1_BTF));
+    I2C1_CR1 |= I2C_CR1_STOP;
+}
+
+static void ssd1306_cmd_stream(const uint8_t *cmds, uint32_t n) {
+    i2c1_start();
+    i2c1_addr(SSD1306_I2C_ADDR);
+    i2c1_byte(0x00U); // Control: Command stream
+    for (uint32_t i = 0U; i < n; i++) {
+        i2c1_byte(cmds[i]);
+    }
+    i2c1_stop();
+}
+
+void SSD1306_Init(void) {
+    RCC_AHB1ENR |= (1U << 1);  // GPIOBEN
+    RCC_APB1ENR |= (1U << 21); // I2C1EN
+
+    // PB6, PB7 -> AF4, Open-Drain, Pull-Up, High Speed
+    GPIOB_MODER   &= ~((3U << 12) | (3U << 14));
+    GPIOB_MODER   |=  ((2U << 12) | (2U << 14));
+    GPIOB_OTYPER  |=  (1U << 6) | (1U << 7);
+    GPIOB_OSPEEDR |=  (3U << 12) | (3U << 14);
+    GPIOB_PUPDR   &= ~((3U << 12) | (3U << 14));
+    GPIOB_PUPDR   |=  (1U << 12) | (1U << 14);
+    GPIOB_AFRL    &= ~((0xFU << 24) | (0xFU << 28));
+    GPIOB_AFRL    |=  (4U << 24) | (4U << 28);
+
+    // Reset I2C1
+    I2C1_CR1 |= I2C_CR1_SWRST;
+    I2C1_CR1 &= ~I2C_CR1_SWRST;
+
+    // Fast Mode 400kHz @ 16MHz APB1
+    I2C1_CR2 = 16U;
+    I2C1_CCR = (1U << 15) | 14U;
+    I2C1_TRISE = 5U;
+    I2C1_CR1 = I2C_CR1_PE;
+
+    for (volatile uint32_t d = 0; d < 1000U; d++);
+
+    static const uint8_t init_cmds[] = {
+        0xAE,             // Display OFF
+        0x20, 0x00,       // Horizontal addressing mode
+        0x21, 0x00, 0x7F, // Column address 0-127
+        0x22, 0x00, 0x07, // Page address 0-7
+        0x40,             // Start line = 0
+        0xA1,             // Segment re-map
+        0xA8, 0x3F,       // Multiplex ratio 64
+        0xC8,             // COM scan reverse
+        0xD3, 0x00,       // Display offset 0
+        0xDA, 0x12,       // COM pins sequential
+        0xD5, 0x80,       // Oscillator freq
+        0xD9, 0xF1,       // Pre-charge
+        0xDB, 0x40,       // VCOMH deselect
+        0x81, 0xCF,       // Contrast
+        0xA4,             // Entire display ON from RAM
+        0xA6,             // Normal display
+        0x8D, 0x14,       // Charge pump enable
+        0xAF,             // Display ON
+    };
+    ssd1306_cmd_stream(init_cmds, sizeof(init_cmds));
+
+    SSD1306_Clear();
+}
+
+void SSD1306_ClearBuffer(void) {
+    for (uint32_t i = 0U; i < sizeof(ScreenBuffer); i++) {
+        ScreenBuffer[i] = 0x00U;
+    }
+}
+
+void SSD1306_DisplayBuffer(void) {
+    static const uint8_t addr[] = {
+        0x21, 0x00, 0x7F,
+        0x22, 0x00, 0x07
+    };
+    ssd1306_cmd_stream(addr, sizeof(addr));
+
+    i2c1_start();
+    i2c1_addr(SSD1306_I2C_ADDR);
+    i2c1_byte(0x40U); // Data stream
+    for (uint32_t i = 0U; i < sizeof(ScreenBuffer); i++) {
+        i2c1_byte(ScreenBuffer[i]);
+    }
+    i2c1_stop();
+}
+
+void SSD1306_Clear(void) {
+    SSD1306_ClearBuffer();
+    SSD1306_DisplayBuffer();
+    CursorX = 0;
+    CursorY = 0;
+}
+
+void SSD1306_SetCursor(uint8_t col, uint8_t row) {
+    CursorX = col;
+    CursorY = row & 0x07U;
+}
+
+void SSD1306_OutChar(char c) {
+    if ((uint8_t)c < 0x20U || (uint8_t)c > 0x7FU) {
+        c = ' ';
+    }
+    const uint8_t *glyph = Font5x8[(uint8_t)c - 0x20U];
+
+    uint32_t col = (uint32_t)CursorX * 6U;
+    uint32_t page = (uint32_t)CursorY;
+
+    if (col + 6U > (uint32_t)SCREENW || page > 7U) return;
+
+    for (uint8_t i = 0U; i < 5U; i++) {
+        ScreenBuffer[page * (uint32_t)SCREENW + col + i] = glyph[i];
+    }
+    ScreenBuffer[page * (uint32_t)SCREENW + col + 5U] = 0x00U; // 1-px gap
+
+    CursorX++;
+    if ((uint32_t)CursorX * 6U >= (uint32_t)SCREENW) {
+        CursorX = 0;
+        if (CursorY < 7U) CursorY++;
+    }
+}
+
+void SSD1306_OutString(const char *str) {
+    if (!str) return;
+    while (*str) {
+        if (*str == '\n') {
+            CursorX = 0;
+            if (CursorY < 7U) CursorY++;
+            str++;
+            continue;
+        }
+        SSD1306_OutChar(*str++);
+    }
+}
+
+void SSD1306_OutUDec(uint16_t n) {
+    char buf[6];
+    uint8_t i = 5U;
+    buf[5] = '\0';
+    do {
+        buf[--i] = (char)('0' + (n % 10U));
+        n = (uint16_t)(n / 10U);
+    } while (n && i > 0U);
+    SSD1306_OutString(&buf[i]);
+}
