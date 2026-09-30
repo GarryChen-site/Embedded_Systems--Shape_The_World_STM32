@@ -31,7 +31,7 @@ int ESP32_ConnectWiFi(const char *ssid, const char *pass, char *ipOut, uint16_t 
 // Query connection status from ESP32
 int ESP32_GetStatus(char *statusOut, uint16_t maxLen, uint32_t timeoutMs);
 
-// Fetch current weather for specified city
+// Fetch current weather (city can be NULL to query the configured location)
 // Fills cityOut, tempOut ("21.5"), descOut ("Clear sky" / "Partly cloudy")
 // Returns ESP32_OK on success
 int ESP32_GetWeather(const char *city, char *cityOut, char *tempOut, char *descOut, uint32_t timeoutMs);

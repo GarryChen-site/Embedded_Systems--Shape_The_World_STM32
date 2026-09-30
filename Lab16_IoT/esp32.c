@@ -83,13 +83,14 @@ int ESP32_GetStatus(char *statusOut, uint16_t maxLen, uint32_t timeoutMs) {
 
 int ESP32_GetWeather(const char *city, char *cityOut, char *tempOut,
                      char *descOut, uint32_t timeoutMs) {
-  if (!city)
-    return ESP32_ERROR;
-
   UART1_FlushRx();
-  UART1_OutString("WEATHER:");
-  UART1_OutString(city);
-  UART1_OutChar('\n');
+  if (city && city[0] != '\0') {
+    UART1_OutString("WEATHER:");
+    UART1_OutString(city);
+    UART1_OutChar('\n');
+  } else {
+    UART1_OutString("WEATHER\n");
+  }
 
   // ESP32 may take several seconds to make the HTTP request and parse JSON
   if (UART1_ReadLine(rxLine, sizeof(rxLine), timeoutMs)) {
